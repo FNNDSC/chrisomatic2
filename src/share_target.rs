@@ -1,10 +1,14 @@
+use compact_str::ToCompactString;
+
+use crate::types::{Group, Username};
+
 /// User or group to share a ChRIS resource with.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ShareTarget {
     /// Username to share with
-    User(String),
+    User(Username),
     /// Group to share with
-    Group(String),
+    Group(Group),
 }
 
 impl serde::ser::Serialize for ShareTarget {
@@ -13,7 +17,7 @@ impl serde::ser::Serialize for ShareTarget {
         S: serde::Serializer,
     {
         match self {
-            ShareTarget::User(username) => serializer.serialize_str(username),
+            ShareTarget::User(username) => serializer.serialize_str(username.as_str()),
             ShareTarget::Group(group) => serializer.serialize_str(&format!("group:{group}")),
         }
     }
@@ -43,12 +47,12 @@ impl<'de> serde::de::Visitor<'de> for StringVisitor {
     {
         if let Some((l, r)) = v.split_once(':') {
             match l {
-                "group" => Ok(ShareTarget::Group(r.to_string())),
-                "user" => Ok(ShareTarget::User(r.to_string())),
+                "group" => Ok(ShareTarget::Group(r.to_compact_string().into())),
+                "user" => Ok(ShareTarget::User(r.to_compact_string().into())),
                 l => Err(E::invalid_value(serde::de::Unexpected::Str(l), &self)),
             }
         } else {
-            Ok(ShareTarget::User(v.to_string()))
+            Ok(ShareTarget::User(v.to_compact_string().into()))
         }
     }
 }
@@ -59,9 +63,9 @@ mod tests {
     use rstest::*;
 
     #[rstest]
-    #[case("alice", ShareTarget::User("alice".to_string()))]
-    #[case("user:alice", ShareTarget::User("alice".to_string()))]
-    #[case("group:friends", ShareTarget::Group("friends".to_string()))]
+    #[case("alice", ShareTarget::User("alice".to_compact_string().into()))]
+    #[case("user:alice", ShareTarget::User("alice".to_compact_string().into()))]
+    #[case("group:friends", ShareTarget::Group("friends".to_compact_string().into()))]
     fn test_deserialize(#[case] input: &str, #[case] expected: ShareTarget) {
         let value = toml::Value::String(input.to_string());
         let actual = value.try_into();
@@ -76,8 +80,8 @@ mod tests {
     }
 
     #[rstest]
-    #[case(ShareTarget::User("alice".to_string()), "alice")]
-    #[case(ShareTarget::Group("friends".to_string()), "group:friends")]
+    #[case(ShareTarget::User("alice".to_compact_string().into()), "alice")]
+    #[case(ShareTarget::Group("friends".to_compact_string().into()), "group:friends")]
     fn test_serialize(#[case] input: ShareTarget, #[case] expected: &str) {
         let actual = toml::Value::try_from(input);
         assert_eq!(actual, Ok(toml::Value::String(expected.to_string())))
