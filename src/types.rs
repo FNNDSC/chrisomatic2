@@ -9,8 +9,8 @@ use nutype::nutype;
 pub struct CubeUrl(String);
 
 impl CubeUrl {
-    pub fn join(&self, path: impl std::fmt::Display) -> String {
-        format!("{self}{path}")
+    pub fn to_url(&self) -> reqwest::Url {
+        reqwest::Url::parse(self.as_str()).unwrap()
     }
 }
 

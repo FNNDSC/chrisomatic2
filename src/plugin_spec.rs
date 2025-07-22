@@ -1,6 +1,6 @@
 use compact_str::CompactString;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct PluginSpec {
     name: CompactString,
     version: Option<CompactString>,

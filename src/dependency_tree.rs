@@ -1,4 +1,4 @@
-use petgraph::graph::NodeIndex;
+pub(crate) use petgraph::graph::NodeIndex;
 use petgraph::stable_graph::StableDiGraph;
 use petgraph::visit::{IntoNeighborsDirected, Topo, Walker};
 use petgraph::{Direction, acyclic::Acyclic};
@@ -8,15 +8,18 @@ type Dag<T> = Acyclic<StableDiGraph<T, ()>>;
 // HINT: a directed edge A->B means B depends on A.
 
 /// A directed acyclic graph (DAG) of computational jobs to run.
+///
+/// `T` should be [Clone] so that it can be retrieved with a separate lifetime from the tree.
 pub(crate) struct DependencyTree<T>(Dag<T>);
 
-impl<T> DependencyTree<T> {
+impl<T: Clone> DependencyTree<T> {
     /// Get the "roots" of the DAG, i.e. all nodes which have no dependencies.
-    pub(crate) fn start(&self) -> Vec<(NodeIndex, &T)> {
+    pub(crate) fn start(&self) -> Vec<(NodeIndex, T)> {
         Topo::new(self.0.inner())
             .iter(self.0.inner())
             .filter_map(|i| self.0.inner().node_weight(i).map(|w| (i, w)))
             .take_while(|(i, _)| self.is_ready(*i))
+            .map(|(i, w)| (i, w.clone()))
             .collect()
     }
 
@@ -30,14 +33,14 @@ impl<T> DependencyTree<T> {
 
     /// Consider the specified node as "done" and remove it. Return all dependent
     /// nodes which are now ready to run because of the removal.
-    pub(crate) fn after(&mut self, i: NodeIndex) -> Vec<(NodeIndex, &T)> {
+    pub(crate) fn after(&mut self, i: NodeIndex) -> Vec<(NodeIndex, T)> {
         let children: Vec<_> = self.0.neighbors(i).collect();
         self.0.remove_node(i);
         children
             .into_iter()
-            .filter_map(|i| {
+            .filter_map(|i| -> Option<(NodeIndex, T)> {
                 if self.is_ready(i) {
-                    self.0.node_weight(i).map(|w| (i, w))
+                    self.0.node_weight(i).map(|w| (i, w.clone()))
                 } else {
                     None
                 }
@@ -87,12 +90,12 @@ mod tests {
         assert!(!dep_tree.is_ready(c));
         assert!(!dep_tree.is_ready(d));
 
-        let expected = HashSet::from_iter([(a, &'a'), (e, &'e')]);
+        let expected = HashSet::from_iter([(a, 'a'), (e, 'e')]);
         let actual: HashSet<_> = dep_tree.start().into_iter().collect();
         assert_eq!(actual, expected);
 
         let actual: HashSet<_> = dep_tree.after(a).into_iter().collect();
-        let expected = HashSet::from_iter([(b, &'b'), (c, &'c')]);
+        let expected = HashSet::from_iter([(b, 'b'), (c, 'c')]);
         assert_eq!(actual, expected);
         assert!(!dep_tree.0.contains_node(a));
         assert!(dep_tree.0.contains_node(b));
