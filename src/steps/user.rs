@@ -7,10 +7,8 @@ use crate::{
     types::*,
 };
 use chris_oag::models;
-use compact_str::CompactString;
-use either::Either::{self, Left, Right};
 use reqwest::{Method, Request, Url};
-use std::{collections::HashMap, rc::Rc};
+use std::rc::Rc;
 
 /// A [PendingStep] to make sure that a user exists. See [UserExistsStep].
 #[derive(Debug, Clone)]
@@ -21,13 +19,13 @@ pub(crate) struct UserExists {
 }
 
 impl PendingStep for UserExists {
-    fn build(&self, map: &DependencyMap) -> Option<Either<Rc<dyn Step>, Entries>> {
+    fn build(&self, map: &DependencyMap) -> PendingStepResult {
         debug_assert!(
             !map.contains_key(&Dependency::AuthToken(self.username.clone())),
             "Duplicate UserExists step for \"{}\"",
             &self.username
         );
-        Some(Left(Rc::new(UserExistsStep(self.clone()))))
+        ok_step(UserExistsStep(self.clone()))
     }
 }
 
@@ -126,16 +124,16 @@ pub(crate) struct UserGetAuthToken {
 }
 
 impl PendingStep for UserGetAuthToken {
-    fn build(&self, map: &DependencyMap) -> Option<Either<Rc<dyn Step>, Entries>> {
+    fn build(&self, map: &DependencyMap) -> PendingStepResult {
         if map.contains_key(&Dependency::AuthToken(self.username.clone())) {
-            return Some(Right(vec![]));
+            return Ok(None);
         }
         debug_assert!(
             !map.contains_key(&Dependency::UserUrl(self.username.clone())),
             "UserGetAuthToken must come after UserExists for \"{}\"",
             &self.username
         );
-        Some(Left(Rc::new(UserGetAuthTokenStep(self.clone()))))
+        ok_step(UserGetAuthTokenStep(self.clone()))
     }
 }
 
@@ -169,24 +167,24 @@ pub(crate) struct UserGetUrl {
 }
 
 impl PendingStep for UserGetUrl {
-    fn build(&self, map: &DependencyMap) -> Option<Either<Rc<dyn Step>, Entries>> {
+    fn build(&self, map: &DependencyMap) -> PendingStepResult {
         if map.contains_key(&Dependency::UserUrl(self.username.clone())) {
-            Some(Right(vec![]))
-        } else if let Some(auth_token) = map.get(&Dependency::AuthToken(self.username.clone())) {
+            Ok(None)
+        } else if let Ok(auth_token) = map.get(Dependency::AuthToken(self.username.clone())) {
             let step = UserGetUrlStep {
                 url: self.url.clone(),
                 auth_token,
                 username: self.username.clone(),
                 details: Rc::clone(&self.details),
             };
-            Some(Left(Rc::new(step)))
+            ok_step(step)
         } else {
             let step = UserExistsStep(UserExists {
                 username: self.username.clone(),
                 details: Rc::clone(&self.details),
                 url: self.url.clone(),
             });
-            Some(Left(Rc::new(step)))
+            ok_step(step)
         }
     }
 }
@@ -233,21 +231,21 @@ pub(crate) struct UserGetDetails {
 }
 
 impl PendingStep for UserGetDetails {
-    fn build(&self, map: &DependencyMap) -> Option<Either<Rc<dyn Step>, Entries>> {
-        let user_url = map.get(&Dependency::UserUrl(self.username.clone()));
-        if user_url.is_some()
+    fn build(&self, map: &DependencyMap) -> PendingStepResult {
+        let user_url = map.get(Dependency::UserUrl(self.username.clone()));
+        if user_url.is_ok()
             && map.contains_key(&Dependency::UserGroupsUrl(self.username.clone()))
             && map.contains_key(&Dependency::UserEmail(self.username.clone()))
         {
-            Some(Right(vec![]))
+            Ok(None)
         } else {
-            Some(Left(Rc::new(UserGetDetailsStep {
+            ok_step(UserGetDetailsStep {
                 url: self.url.clone(),
                 username: self.username.clone(),
                 details: Rc::clone(&self.details),
                 user_url: user_url?,
-                auth_token: map.get(&Dependency::AuthToken(self.username.clone()))?,
-            })))
+                auth_token: map.get(Dependency::AuthToken(self.username.clone()))?,
+            })
         }
     }
 }
@@ -292,21 +290,21 @@ pub(crate) struct UserSetEmail {
 }
 
 impl PendingStep for UserSetEmail {
-    fn build(&self, map: &DependencyMap) -> Option<Either<Rc<dyn Step>, Entries>> {
-        let current_email = map.get(&Dependency::UserEmail(self.username.clone()))?;
+    fn build(&self, map: &DependencyMap) -> PendingStepResult {
+        let current_email = map.get(Dependency::UserEmail(self.username.clone()))?;
         if let Some(desired_email) = self.details.email.as_ref()
             && current_email.as_ref() != desired_email
         {
             let step = UserSetEmailStep {
-                user_url: map.get(&Dependency::UserUrl(self.username.clone()))?,
-                auth_token: map.get(&Dependency::AuthToken(self.username.clone()))?,
+                user_url: map.get(Dependency::UserUrl(self.username.clone()))?,
+                auth_token: map.get(Dependency::AuthToken(self.username.clone()))?,
                 username: self.username.clone(),
                 password: self.details.password.clone(),
                 email: desired_email.clone(),
             };
-            Some(Left(Rc::new(step)))
+            ok_step(step)
         } else {
-            Some(Right(vec![]))
+            Ok(None)
         }
     }
 }

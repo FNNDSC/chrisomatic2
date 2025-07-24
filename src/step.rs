@@ -1,4 +1,3 @@
-use either::Either;
 use std::rc::Rc;
 
 use crate::state::{Dependency, DependencyMap, Entry};
@@ -7,27 +6,35 @@ use crate::state::{Dependency, DependencyMap, Entry};
 pub(crate) trait PendingStep {
     /// Provide the dependencies and create a [Step].
     ///
-    /// ## Return
+    /// - [Err] indicates the step has an unfulfilled dependency.
+    /// - [None] indicates the step is redundant.
+    /// - [Some] indicates the step can run.
+    fn build(&self, map: &DependencyMap) -> PendingStepResult;
+    /// Describe the target this [PendingStep] wants to create/modify.
     ///
-    /// - [None] if dependencies are not met.
-    /// - [Right] if this step's value can be produced trivially from its dependencies.
-    /// - [Left] if this step needs to make HTTP requests to produce its value.
-    fn build(&self, map: &DependencyMap) -> Option<Either<Rc<dyn Step>, Entries>>;
+    /// [None] indicates the step is for utility only and does not
+    /// correspond to the creation or modification of an API resource.
+    fn description(&self) -> Option<Dependency> {
+        None
+    }
+}
+
+/// Return type of [PendingStep::build].
+pub(crate) type PendingStepResult = Result<Option<Rc<dyn Step>>, Dependency>;
+
+#[inline(always)]
+/// Convenience function to return [Step] from [PendingStep::build].
+pub(crate) fn ok_step(step: impl Step + 'static) -> PendingStepResult {
+    Ok(Some(Rc::new(step)))
 }
 
 /// A `Step` defines a set of operations against the _CUBE_ API regarding a specific resource:
 ///
-/// 1. **check** whether the specified resource already exists
+/// 1. **search** whether the specified resource already exists
 /// 2. **modify** an existing resource to match the spec
 /// 3. **create** a resource matching the spec
 ///
-/// ## Behvaior
-///
-/// 1. [Step::search] is called to search for the resource's prior existence in the API.
-///    (It can also do the resource creation/modification right away if that is possible.)
-/// 2. [Step::deserialize_search_response] decides what to do next.
-/// 3. If the resource needs to be created, call [Step::create]. Or, if the resource
-///    needs to be modified, calll [Step::modify].
+/// See [crate::exec_step::exec_step].
 pub(crate) trait Step {
     /// Create an HTTP request which searches the API for this resource.
     fn search(&self) -> reqwest::Request;

@@ -1,58 +1,120 @@
 use std::rc::Rc;
 
-use either::Either;
 use futures_concurrency::stream::StreamGroup;
-use futures_lite::StreamExt;
+use futures_lite::{Stream, StreamExt};
 
 use crate::{
     dependency_tree::{DependencyTree, NodeIndex},
-    exec_step::StepError,
-    state::DependencyMap,
+    exec_step::{StepEffect, exec_step},
+    state::{Dependency, DependencyMap},
     step::{Entries, PendingStep, Step},
 };
+use async_stream::stream;
 
+/// Execute steps from `tree` in topological ordering.
+///
+/// How it works: first, all steps without dependencies (as produced by
+/// [DependencyTree::start]) are executed. Whenever a step is finished,
+/// a [Outcome] is yielded by this stream, and the [Entries] produced
+/// by the step will be stored in a local [DependencyMap]. Any satisfied
+/// dependents of the finished step (as produced by [DependencyTree::after])
+/// are then provided with their dependencies via [PendingStep::build]
+/// before being executed by [exec_step].
+///
+/// Notes:
+///
+/// - The implementation does not use "tasks", i.e. this [Stream] must be
+///   polled/`.await`-ed for it to do work.
+/// - If this [Stream] is dropped without being exhausted, all running steps
+///   will be cancelled. Doing so might be desirable e.g. to implement a
+///   "fail-fast" feature.
+/// - If a [Outcome::Error] are produced, it is likely that many
+///   [Outcome::Unfulfilled] will follow.
+/// - If a [Outcome::Unfulfilled] appears without a preceeding [Outcome::Error],
+///   it means there is a bug in [crate::plan].
 pub(crate) async fn exec_tree(
     client: reqwest::Client,
     mut tree: DependencyTree<Rc<dyn PendingStep>>,
-) -> Result<(), StepError> {
-    let mut cache: DependencyMap = DependencyMap::with_capacity(tree.count() * 4);
-    let mut group = StreamGroup::new();
+) -> impl Stream<Item = Outcome> {
+    stream! {
+        let mut cache: DependencyMap = DependencyMap::with_capacity(tree.count() * 4);
+        let mut group = StreamGroup::new();
 
-    // NOTE: using macro instead of closure or function to reduce verbosity
-    //       of type and lifetime annotations
-    macro_rules! run_steps {
-        ($pending_steps:expr) => {
-            for (id, pending_step) in $pending_steps {
-                match pending_step.build(&cache).unwrap().clone() {
-                    Either::Left(step) => {
-                        let fut = exec_step(&client, step, id);
-                        let stream = futures_lite::stream::once_future(Box::pin(fut));
-                        group.insert(stream);
+        // NOTE: using macro instead of closure or function to reduce verbosity
+        //       of type and lifetime annotations, also to work around the
+        //       restrictions of where `yield` can appear inside the `stream!`
+        macro_rules! run_steps {
+            ($pending_steps:expr) => {
+                for (id, pending_step) in $pending_steps {
+                    let pre_check: PreCheck<_> = pending_step.build(&cache).into();
+                    match pre_check {
+                        PreCheck::Fulfilled => (),
+                        PreCheck::Unfulfilled(dependency) => {
+                            if let Some(target) = pending_step.description() {
+                                yield Outcome {
+                                    target,
+                                    effect: StepEffect::Unfulfilled(dependency)
+                                };
+                            }
+                        }
+                        PreCheck::Step(step) => {
+                            let target = pending_step.description();
+                            let fut = exec_step_wrapper(&client, step, id, target);
+                            let stream = futures_lite::stream::once_future(Box::pin(fut));
+                            group.insert(stream);
+                        }
                     }
-                    Either::Right(m) => cache.insert_all(m),
                 }
+            };
+        }
+
+        run_steps!(tree.start());
+
+        while let Some((id, outcome, outputs)) = group.next().await {
+            cache.insert_all(outputs);
+            if let Some(outcome) = outcome {
+                yield outcome;
             }
-        };
+            run_steps!(tree.after(id));
+        }
     }
-
-    run_steps!(tree.start());
-
-    // NOTE: `?` returns without awaiting the remaining futures in steam,
-    //       which will effectively be cancelled (and the HTTP requests
-    //       will be closed abruptly).
-    while let Some((id, outputs)) = group.try_next().await? {
-        cache.insert_all(outputs);
-        run_steps!(tree.after(id));
-    }
-    Ok(())
 }
 
-async fn exec_step(
+/// Wraps [exec_step] to wrangle its return types.
+async fn exec_step_wrapper(
     client: &reqwest::Client,
     step: Rc<dyn Step>,
     id: NodeIndex,
-) -> Result<(NodeIndex, Entries), StepError> {
-    crate::exec_step::exec_step(client, step)
-        .await
-        .map(|m| (id, m))
+    target: Option<Dependency>,
+) -> (NodeIndex, Option<Outcome>, Entries) {
+    let (effect, outputs) = exec_step(client, step).await;
+    let outcome = target.map(|target| Outcome { target, effect });
+    (id, outcome, outputs)
+}
+
+pub(crate) struct Outcome {
+    pub(crate) target: Dependency,
+    pub(crate) effect: StepEffect,
+}
+
+/// Flattened enum for return value of [PendingStep::build].
+enum PreCheck<T> {
+    /// The step is redundant.
+    Fulfilled,
+    /// The step cannot run because of an unfulfilled dependency.
+    Unfulfilled(Dependency),
+    /// The step can run.
+    Step(T),
+}
+
+impl<T> From<Result<Option<T>, Dependency>> for PreCheck<T> {
+    fn from(value: Result<Option<T>, Dependency>) -> Self {
+        match value {
+            Ok(option) => match option {
+                Some(x) => PreCheck::Step(x),
+                None => PreCheck::Fulfilled,
+            },
+            Err(e) => PreCheck::Unfulfilled(e),
+        }
+    }
 }

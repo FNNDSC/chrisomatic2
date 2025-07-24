@@ -1,7 +1,7 @@
 //! Naming convention: Noun before verb (like French)
 
-mod auth_token;
+mod user;
 // mod feed;
 
-pub(crate) use auth_token::*;
+pub(crate) use user::*;
 // pub(crate) use feed::*;

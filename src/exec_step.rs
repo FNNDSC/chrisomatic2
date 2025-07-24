@@ -1,11 +1,31 @@
 use std::rc::Rc;
 
-use crate::step::{Check, Entries, StatusCheck, Step};
+use crate::{
+    state::Dependency,
+    step::{Check, Entries, StatusCheck, Step},
+};
 
+/// Execute a [Step].
+///
+/// 1. [Step::search] is called to search for the resource's prior existence in the API.
+///    (It can also do the resource creation/modification right away if that is possible.)
+/// 2. [Step::deserialize] decides what to do next.
+/// 3. If the resource needs to be created, call [Step::create]. Or, if the resource
+///    needs to be modified, calll [Step::modify].
 pub(crate) async fn exec_step(
     client: &reqwest::Client,
     step: Rc<dyn Step>,
-) -> Result<Entries, StepError> {
+) -> (StepEffect, Entries) {
+    match exec_step_impl(client, step).await {
+        Ok(tup) => tup,
+        Err(e) => (StepEffect::Error(e), vec![]),
+    }
+}
+
+async fn exec_step_impl(
+    client: &reqwest::Client,
+    step: Rc<dyn Step>,
+) -> Result<(StepEffect, Entries), StepError> {
     let req = step.search();
     let method = req.method().clone();
     let res = client.execute(step.search()).await?;
@@ -22,13 +42,13 @@ pub(crate) async fn exec_step(
         }
     };
     match check {
-        Check::Exists(data) => Ok(data),
-        Check::Modified(data) => Ok(data),
+        Check::Exists(data) => Ok((StepEffect::Unmodified, data)),
+        Check::Modified(data) => Ok((StepEffect::Modified, data)),
         Check::DoesNotExist => {
             if let Some(req) = step.create() {
                 let res = client.execute(req.request()).await?.error_for_status()?;
                 let data = req.deserialize(res.bytes().await?)?;
-                Ok(data)
+                Ok((StepEffect::Created, data))
             } else {
                 Err(StepError::Uncreatable(url))
             }
@@ -37,7 +57,7 @@ pub(crate) async fn exec_step(
             if let Some(req) = step.modify() {
                 let res = client.execute(req.request()).await?.error_for_status()?;
                 let data = req.deserialize(res.bytes().await?)?;
-                Ok(data)
+                Ok((StepEffect::Modified, data))
             } else {
                 Err(StepError::Unmodifiable(url))
             }
@@ -61,4 +81,18 @@ pub(crate) enum StepError {
     },
     #[error(transparent)]
     Deserialize(#[from] serde_json::Error),
+}
+
+/// The effect a step has had on the API state.
+pub(crate) enum StepEffect {
+    /// A resource was created.
+    Created,
+    /// A resource was found.
+    Unmodified,
+    /// A resource was modified.
+    Modified,
+    /// The step was not performed because of an unfulfilled dependency.
+    Unfulfilled(Dependency),
+    /// The step produced an error.
+    Error(StepError),
 }

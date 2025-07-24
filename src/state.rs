@@ -42,8 +42,8 @@ impl DependencyMap {
     }
 
     /// Returns a [Rc] to the value corresponding to the key.
-    pub fn get(&self, k: &Dependency) -> Option<Rc<String>> {
-        self.0.get(k).map(Rc::clone)
+    pub fn get(&self, k: Dependency) -> Result<Rc<String>, Dependency> {
+        self.0.get(&k).map(Rc::clone).ok_or(k)
     }
 
     /// Returns `true` if the map contains a value for the specified key.
