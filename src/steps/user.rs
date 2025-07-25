@@ -7,6 +7,7 @@ use crate::{
     types::*,
 };
 use chris_oag::models;
+use nonempty::{NonEmpty, nonempty};
 use reqwest::{Method, Request, Url};
 use std::rc::Rc;
 
@@ -56,6 +57,10 @@ impl Step for UserExistsStep {
     fn create(&self) -> Option<Box<dyn StepRequest>> {
         Some(Box::new(CreateUserRequest::from(self.0.clone())))
     }
+
+    fn provides(&self) -> NonEmpty<Dependency> {
+        nonempty![Dependency::UserExists(self.0.username.clone())]
+    }
 }
 
 pub(crate) struct CreateUserRequest {
@@ -104,10 +109,10 @@ fn deserialize_user_response(
 ) -> serde_json::Result<Entries> {
     let user: models::User = serde_json::from_slice(body.as_ref())?;
     let outputs = vec![
-        // (
-        //     Dependency::UserId(username.clone()),
-        //     user.id.to_string(),
-        // ),
+        (
+            Dependency::UserExists(username.clone()),
+            user.id.to_string(), // arbitrary placeholder value
+        ),
         (Dependency::UserUrl(username.clone()), user.url),
         (Dependency::UserEmail(username.clone()), user.email),
         (Dependency::UserGroupsUrl(username.clone()), user.groups),
@@ -125,6 +130,7 @@ pub(crate) struct UserGetAuthToken {
 
 impl PendingStep for UserGetAuthToken {
     fn build(&self, map: &dyn DependencyMap) -> PendingStepResult {
+        map.get(Dependency::UserExists(self.username.clone()))?;
         if map.contains_key(&Dependency::AuthToken(self.username.clone())) {
             return Ok(None);
         }
@@ -154,6 +160,10 @@ impl Step for UserGetAuthTokenStep {
 
     fn deserialize(&self, body: bytes::Bytes) -> serde_json::Result<Check> {
         deserialize_auth_token(&self.0.username, body).map(Check::Exists)
+    }
+
+    fn provides(&self) -> NonEmpty<Dependency> {
+        nonempty![Dependency::AuthToken(self.0.username.clone())]
     }
 }
 
@@ -221,6 +231,10 @@ impl Step for UserGetUrlStep {
             details: Rc::clone(&self.details),
         }))
     }
+
+    fn provides(&self) -> NonEmpty<Dependency> {
+        nonempty![Dependency::UserUrl(self.username.clone())]
+    }
 }
 
 /// A [PendingStep] to make sure that [DependencyMap] contains details of a user. See [UserGetDetailsStep].
@@ -280,22 +294,31 @@ impl Step for UserGetDetailsStep {
             details: Rc::clone(&self.details),
         }))
     }
+
+    fn provides(&self) -> NonEmpty<Dependency> {
+        nonempty![
+            Dependency::UserUrl(self.username.clone()),
+            Dependency::UserGroupsUrl(self.username.clone()),
+            Dependency::UserEmail(self.username.clone()),
+        ]
+    }
 }
 
-/// A [PendingStep] to set the user's email. See [UserSetEmailStep].
+/// A [PendingStep] to sync the user's details on the backend with what is specified.
+/// See [UserDetailsFinalizeStep].
 #[derive(Clone, Debug)]
-pub(crate) struct UserSetEmail {
+pub(crate) struct UserDetailsFinalize {
     username: Username,
     details: Rc<UserDetails>,
 }
 
-impl PendingStep for UserSetEmail {
+impl PendingStep for UserDetailsFinalize {
     fn build(&self, map: &dyn DependencyMap) -> PendingStepResult {
         let current_email = map.get(Dependency::UserEmail(self.username.clone()))?;
         if let Some(desired_email) = self.details.email.as_ref()
             && current_email.as_ref() != desired_email
         {
-            let step = UserSetEmailStep {
+            let step = UserDetailsFinalizeStep {
                 user_url: map.get(Dependency::UserUrl(self.username.clone()))?,
                 auth_token: map.get(Dependency::AuthToken(self.username.clone()))?,
                 username: self.username.clone(),
@@ -315,13 +338,23 @@ fn deserialize_auth_token(
 ) -> serde_json::Result<Entries> {
     let body: models::AuthToken = serde_json::from_slice(body.as_ref())?;
     let value = format!("Token {}", body.token);
-    let outputs = vec![(Dependency::AuthToken(username.clone()), value)];
+    let outputs = vec![
+        (
+            Dependency::UserExists(username.clone()),
+            "token".to_string(), // arbitrary placeholder value
+        ),
+        (Dependency::AuthToken(username.clone()), value),
+    ];
     Ok(outputs)
 }
 
-/// A [Step] to set the user's email (of a user which already exists).
+/// A [Step] to sync the user's details on the backend with what is specified.
+///
+/// Really, this is a step to set only the user's email, because it is the only
+/// mutable field that is possible to set (username is immutable, password cannot
+/// be changed without knowing its previous value).
 #[derive(Debug, Clone)]
-pub(crate) struct UserSetEmailStep {
+pub(crate) struct UserDetailsFinalizeStep {
     user_url: Rc<String>,
     auth_token: Rc<String>,
     username: Username,
@@ -329,7 +362,7 @@ pub(crate) struct UserSetEmailStep {
     email: String,
 }
 
-impl Step for UserSetEmailStep {
+impl Step for UserDetailsFinalizeStep {
     fn search(&self) -> reqwest::Request {
         let url = Url::parse(&self.user_url).unwrap();
         let body = models::UserRequest {
@@ -346,6 +379,25 @@ impl Step for UserSetEmailStep {
     }
 
     fn deserialize(&self, body: bytes::Bytes) -> serde_json::Result<Check> {
-        deserialize_user_response(&self.username, body).map(Check::Modified)
+        deserialize_user_response(&self.username, body)
+            .map(finalize_email)
+            .map(Check::Modified)
     }
+
+    fn provides(&self) -> NonEmpty<Dependency> {
+        nonempty![Dependency::UserEmailFinal(self.username.clone())]
+    }
+}
+
+/// Change [Dependency::UserEmail] to [Dependency::UserEmailFinal].
+fn finalize_email(mut entries: Entries) -> Entries {
+    entries.iter_mut().for_each(|entry| {
+        if let Dependency::UserEmail(username) = &entry.0 {
+            *entry = (
+                Dependency::UserEmailFinal(username.clone()),
+                entry.1.clone(),
+            );
+        }
+    });
+    entries
 }

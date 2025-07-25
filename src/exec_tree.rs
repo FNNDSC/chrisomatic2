@@ -4,9 +4,10 @@ use futures_concurrency::stream::StreamGroup;
 use futures_lite::{Stream, StreamExt};
 
 use crate::{
-    dependency_map::{Dependency, DependencyMap},
+    dependency_map::Dependency,
+    dependency_spy::target_of,
     dependency_tree::{DependencyTree, NodeIndex},
-    exec_step::{StepEffect, exec_step},
+    exec_step::{Outcome, StepEffect, exec_step},
     state::DependencyHashMap,
     step::{Entries, PendingStep, Step},
 };
@@ -51,16 +52,13 @@ pub(crate) async fn exec_tree(
                     match pre_check {
                         PreCheck::Fulfilled => (),
                         PreCheck::Unfulfilled(dependency) => {
-                            if let Some(target) = pending_step.description() {
-                                yield Outcome {
-                                    target,
-                                    effect: StepEffect::Unfulfilled(dependency)
-                                };
+                            yield Outcome {
+                                target: target_of(pending_step),
+                                effect: StepEffect::Unfulfilled(dependency)
                             }
                         }
                         PreCheck::Step(step) => {
-                            let target = pending_step.description();
-                            let fut = exec_step_wrapper(&client, step, id, target);
+                            let fut = exec_step_wrapper(&client, step, id);
                             let stream = futures_lite::stream::once_future(Box::pin(fut));
                             group.insert(stream);
                         }
@@ -86,16 +84,9 @@ async fn exec_step_wrapper(
     client: &reqwest::Client,
     step: Rc<dyn Step>,
     id: NodeIndex,
-    target: Option<Dependency>,
 ) -> (NodeIndex, Option<Outcome>, Entries) {
-    let (effect, outputs) = exec_step(client, step).await;
-    let outcome = target.map(|target| Outcome { target, effect });
+    let (outcome, outputs) = exec_step(client, step).await;
     (id, outcome, outputs)
-}
-
-pub(crate) struct Outcome {
-    pub(crate) target: Dependency,
-    pub(crate) effect: StepEffect,
 }
 
 /// Flattened enum for return value of [PendingStep::build].

@@ -167,6 +167,7 @@ dependencies = [
  "futures-concurrency",
  "futures-lite",
  "http",
+ "nonempty",
  "nutype",
  "petgraph",
  "reqwest",
@@ -902,6 +903,12 @@ dependencies = [
  "wasi 0.11.1+wasi-snapshot-preview1",
  "windows-sys 0.59.0",
 ]
+
+[[package]]
+name = "nonempty"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9737e026353e5cd0736f98eddae28665118eb6f6600902a7f50db585621fecb6"
 
 [[package]]
 name = "nu-ansi-term"

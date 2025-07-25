@@ -15,10 +15,21 @@ use crate::{
 pub(crate) async fn exec_step(
     client: &reqwest::Client,
     step: Rc<dyn Step>,
-) -> (StepEffect, Entries) {
+) -> (Option<Outcome>, Entries) {
+    let description = step.description();
+    let provides = step.provides().head;
     match exec_step_impl(client, step).await {
-        Ok(tup) => tup,
-        Err(e) => (StepEffect::Error(e), vec![]),
+        Ok((effect, outputs)) => {
+            let outcome = description.map(|target| Outcome { target, effect });
+            (outcome, outputs)
+        }
+        Err(e) => {
+            let outcome = Outcome {
+                target: description.unwrap_or(provides),
+                effect: StepEffect::Error(e),
+            };
+            (Some(outcome), vec![])
+        }
     }
 }
 
@@ -95,4 +106,9 @@ pub(crate) enum StepEffect {
     Unfulfilled(Dependency),
     /// The step produced an error.
     Error(StepError),
+}
+
+pub(crate) struct Outcome {
+    pub(crate) target: Dependency,
+    pub(crate) effect: StepEffect,
 }

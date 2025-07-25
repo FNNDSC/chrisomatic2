@@ -1,5 +1,7 @@
 use std::rc::Rc;
 
+use nonempty::NonEmpty;
+
 use crate::dependency_map::{Dependency, DependencyMap, Entry};
 
 /// A `PendingStep` represents a [Step] with data dependencies.
@@ -10,13 +12,6 @@ pub(crate) trait PendingStep {
     /// - [None] indicates the step is redundant.
     /// - [Some] indicates the step can run.
     fn build(&self, map: &dyn DependencyMap) -> PendingStepResult;
-    /// Describe the target this [PendingStep] wants to create/modify.
-    ///
-    /// [None] indicates the step is for utility only and does not
-    /// correspond to the creation or modification of an API resource.
-    fn description(&self) -> Option<Dependency> {
-        None
-    }
 }
 
 /// Return type of [PendingStep::build].
@@ -58,6 +53,17 @@ pub(crate) trait Step {
 
     /// Create an HTTP request which modifies the API resource.
     fn modify(&self) -> Option<Box<dyn StepRequest>> {
+        None
+    }
+
+    /// Returns keys of what this step provides unconditionally when successful.
+    fn provides(&self) -> NonEmpty<Dependency>;
+
+    /// Describe the API resource affected by this step.
+    ///
+    /// [None] indicates the step is for utility only and does not
+    /// correspond to the creation or modification of an API resource.
+    fn description(&self) -> Option<Dependency> {
         None
     }
 }

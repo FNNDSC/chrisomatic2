@@ -12,6 +12,13 @@ type Dag<T> = Acyclic<StableDiGraph<T, ()>>;
 /// `T` should be [Clone] so that it can be retrieved with a separate lifetime from the tree.
 pub(crate) struct DependencyTree<T>(Dag<T>);
 
+impl<T> DependencyTree<T> {
+    /// Count the number of nodes.
+    pub(crate) fn count(&self) -> usize {
+        self.0.node_count()
+    }
+}
+
 impl<T: Clone> DependencyTree<T> {
     /// Get the "roots" of the DAG, i.e. all nodes which have no dependencies.
     pub(crate) fn start(&self) -> Vec<(NodeIndex, T)> {
@@ -46,11 +53,6 @@ impl<T: Clone> DependencyTree<T> {
                 }
             })
             .collect()
-    }
-
-    /// Count the number of nodes.
-    pub(crate) fn count(&self) -> usize {
-        self.0.node_count()
     }
 }
 
