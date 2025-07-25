@@ -1,13 +1,13 @@
 use std::rc::Rc;
 
-use crate::{plugin_spec::PluginSpec, types::Username};
+use chrisomatic_spec::{PluginSpec, Username};
 
 /// [Dependency] and value pair.
-pub(crate) type Entry = (Dependency, String);
+pub type Entry = (Dependency, String);
 
 /// Dependency keys.
 #[derive(Hash, Eq, PartialEq, Clone, Debug)]
-pub(crate) enum Dependency {
+pub enum Dependency {
     /// A placeholder key which, if present, guarantees that the user exists.
     UserExists(Username),
     UserUrl(Username),
@@ -18,7 +18,7 @@ pub(crate) enum Dependency {
     PluginUrl(PluginSpec),
 }
 
-pub(crate) trait DependencyMap {
+pub trait DependencyMap {
     /// Returns a [Rc] to the value corresponding to the key.
     ///
     /// Calling [DependencyMap::get] from [crate::step::PendingStep::build]
@@ -32,10 +32,20 @@ pub(crate) trait DependencyMap {
     /// More specifically, the code should look something like:
     ///
     /// ```
-    /// fn build(&self, map: &dyn DependencyMap) -> PendingStepResult {
-    ///     if map.contains_key(&Dependency::UserUrl(self.username.clone())) {
-    ///         // if true...
-    ///         return Ok(None); // step is redundant, skip it
+    /// use chrisomatic_spec::Username;
+    /// use chrisomatic_step::{Dependency, DependencyMap, PendingStep, PendingStepResult};
+    ///
+    /// struct Example {
+    ///     username: Username
+    /// };
+    ///
+    /// impl PendingStep for Example {
+    ///     fn build(&self, map: &dyn DependencyMap) -> PendingStepResult {
+    ///         if map.contains_key(&Dependency::UserUrl(self.username.clone())) {
+    ///             // if true...
+    ///             return Ok(None); // step is redundant, skip it
+    ///         }
+    ///         todo!()
     ///     }
     /// }
     /// ```

@@ -1,9 +1,6 @@
 use std::rc::Rc;
 
-use crate::{
-    dependency_map::Dependency,
-    step::{Check, Entries, StatusCheck, Step},
-};
+use chrisomatic_step::{Check, Dependency, Entries, StatusCheck, Step};
 
 /// Execute a [Step].
 ///

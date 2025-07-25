@@ -3,12 +3,12 @@ use std::collections::HashMap;
 use compact_str::CompactString;
 use serde::{Deserialize, Serialize};
 
-use crate::{plugin_spec::PluginSpec, share_target::ShareTarget, types::Username};
+use crate::{plugin_spec::PluginSpec, share_target::ShareTarget, types::*};
 
 /// Chrisomatic manifest.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Manifest {
-    pub global: Option<Global>,
+    pub global: Global,
     pub user: HashMap<Username, UserDetails>,
     pub userfiles: Vec<UserFileSpec>,
     pub feeds: Vec<FeedSpec>,
@@ -16,7 +16,9 @@ pub struct Manifest {
 
 /// Chrisomatic global configuration options.
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Global {}
+pub struct Global {
+    pub cube: CubeUrl,
+}
 
 /// Chrisomatic user details.
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -57,6 +59,22 @@ pub enum FsPluginSpec {
     },
     Other {
         plugin: PluginSpec,
-        args: HashMap<CompactString, toml::Value>,
+        args: HashMap<CompactString, ArgValue>,
     },
+}
+
+/// Plugin argument values.
+///
+/// Ref: <https://github.com/FNNDSC/ChRIS_ultron_backEnd/blob/v6.4.0/chris_backend/plugins/enums.py#L3-L5>
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(untagged)]
+pub enum ArgValue {
+    /// string, path, or unextpath type
+    Stringish(String),
+    /// float type
+    Float(f64),
+    /// boolean type
+    Boolean(bool),
+    /// integer type
+    Integer(i64),
 }

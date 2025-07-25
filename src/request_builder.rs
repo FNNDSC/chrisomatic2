@@ -1,5 +1,4 @@
-use http::HeaderValue;
-use reqwest::{Request, header};
+use reqwest::{Request, header, header::HeaderValue};
 use serde::Serialize;
 
 /// Extension trait for [reqwest::Request].

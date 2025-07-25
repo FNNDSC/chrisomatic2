@@ -162,20 +162,49 @@ dependencies = [
  "async-stream",
  "bytes",
  "chris-oag",
- "compact_str",
- "either",
+ "chrisomatic_spec",
+ "chrisomatic_step",
+ "chrisomatic_step_macro",
  "futures-concurrency",
  "futures-lite",
- "http",
  "nonempty",
- "nutype",
  "petgraph",
  "reqwest",
- "rstest",
  "serde",
  "serde_json",
  "thiserror",
+]
+
+[[package]]
+name = "chrisomatic_spec"
+version = "0.1.0"
+dependencies = [
+ "compact_str",
+ "nutype",
+ "reqwest",
+ "rstest",
+ "serde",
  "toml",
+]
+
+[[package]]
+name = "chrisomatic_step"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "chrisomatic_spec",
+ "nonempty",
+ "reqwest",
+ "serde_json",
+]
+
+[[package]]
+name = "chrisomatic_step_macro"
+version = "0.1.0"
+dependencies = [
+ "chrisomatic_step",
+ "quote",
+ "syn",
 ]
 
 [[package]]
@@ -298,15 +327,6 @@ name = "dyn-clone"
 version = "1.0.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1c7a8fb8a9fbf66c1f703fe16184d10ca0ee9d23be5b4436400408ba54a95005"
-
-[[package]]
-name = "either"
-version = "1.15.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "48c757948c5ede0e46177b7add2e67155f70e33c07fea8284df6576da70b3719"
-dependencies = [
- "serde",
-]
 
 [[package]]
 name = "equivalent"
@@ -1443,9 +1463,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.140"
+version = "1.0.141"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "20068b6e96dc6c9bd23e01df8827e6c7e1f2fddd43c21810382803c136b99373"
+checksum = "30b9eff21ebe718216c6ec64e1d9ac57087aad11efc64e32002bce4a0d4c03d3"
 dependencies = [
  "itoa",
  "memchr",

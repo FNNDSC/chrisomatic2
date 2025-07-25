@@ -1,22 +1,18 @@
-use crate::{
-    dependency_map::{Dependency, DependencyMap},
-    extra_models::RootResponse,
-    request_builder::RequestBuilder,
-    spec::*,
-    step::*,
-    types::*,
-};
+use crate::{extra_models::RootResponse, request_builder::RequestBuilder};
 use chris_oag::models;
+use chrisomatic_spec::*;
+use chrisomatic_step::*;
+use chrisomatic_step_macro::AsRefPendingStep;
 use nonempty::{NonEmpty, nonempty};
 use reqwest::{Method, Request, Url};
 use std::rc::Rc;
 
 /// A [PendingStep] to make sure that a user exists. See [UserExistsStep].
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, AsRefPendingStep)]
 pub(crate) struct UserExists {
-    username: Username,
-    details: Rc<UserDetails>,
-    url: CubeUrl,
+    pub(crate) username: Username,
+    pub(crate) details: Rc<UserDetails>,
+    pub(crate) url: CubeUrl,
 }
 
 impl PendingStep for UserExists {
@@ -121,11 +117,11 @@ fn deserialize_user_response(
 }
 
 /// A [PendingStep] to get a user's authorization token. See [UserGetAuthTokenStep].
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, AsRefPendingStep)]
 pub(crate) struct UserGetAuthToken {
-    username: Username,
-    password: String,
-    url: CubeUrl,
+    pub(crate) username: Username,
+    pub(crate) password: String,
+    pub(crate) url: CubeUrl,
 }
 
 impl PendingStep for UserGetAuthToken {
@@ -169,11 +165,11 @@ impl Step for UserGetAuthTokenStep {
 
 /// A [PendingStep] to make sure that the [DependencyMap] contains [Dependency::UserUrl].
 /// See [UserGetUrlStep].
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, AsRefPendingStep)]
 pub(crate) struct UserGetUrl {
-    username: Username,
-    details: Rc<UserDetails>,
-    url: CubeUrl,
+    pub(crate) username: Username,
+    pub(crate) details: Rc<UserDetails>,
+    pub(crate) url: CubeUrl,
 }
 
 impl PendingStep for UserGetUrl {
@@ -238,10 +234,11 @@ impl Step for UserGetUrlStep {
 }
 
 /// A [PendingStep] to make sure that [DependencyMap] contains details of a user. See [UserGetDetailsStep].
+#[derive(Clone, Debug, AsRefPendingStep)]
 pub(crate) struct UserGetDetails {
-    url: CubeUrl,
-    username: Username,
-    details: Rc<UserDetails>,
+    pub(crate) url: CubeUrl,
+    pub(crate) username: Username,
+    pub(crate) details: Rc<UserDetails>,
 }
 
 impl PendingStep for UserGetDetails {
@@ -306,10 +303,10 @@ impl Step for UserGetDetailsStep {
 
 /// A [PendingStep] to sync the user's details on the backend with what is specified.
 /// See [UserDetailsFinalizeStep].
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, AsRefPendingStep)]
 pub(crate) struct UserDetailsFinalize {
-    username: Username,
-    details: Rc<UserDetails>,
+    pub(crate) username: Username,
+    pub(crate) details: Rc<UserDetails>,
 }
 
 impl PendingStep for UserDetailsFinalize {
@@ -353,7 +350,6 @@ fn deserialize_auth_token(
 /// Really, this is a step to set only the user's email, because it is the only
 /// mutable field that is possible to set (username is immutable, password cannot
 /// be changed without knowing its previous value).
-#[derive(Debug, Clone)]
 pub(crate) struct UserDetailsFinalizeStep {
     user_url: Rc<String>,
     auth_token: Rc<String>,

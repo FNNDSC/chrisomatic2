@@ -1,5 +1,6 @@
 use compact_str::CompactString;
 
+/// A specified [_ChRIS_ plugin](https://chrisproject.org/docs/plugins).
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct PluginSpec {
     name: CompactString,

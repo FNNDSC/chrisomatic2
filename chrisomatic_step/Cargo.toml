@@ -1,0 +1,11 @@
+[package]
+name = "chrisomatic_step"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+nonempty = "0.12"
+chrisomatic_spec = { path = "../chrisomatic_spec" }
+reqwest = { version = "0.12", default-features = false }
+bytes = "1"
+serde_json = "1"

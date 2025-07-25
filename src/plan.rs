@@ -1,17 +1,114 @@
-// use serde::de::DeserializeOwned;
+use std::collections::{HashMap, HashSet};
+use std::rc::Rc;
 
-// use crate::{
-//     Manifest,
-//     dependency_tree::DependencyTree,
-//     step::{Dependency, Step},
-// };
+use crate::dependency_tree::{Dag, DependencyTree, NodeIndex};
+use crate::steps::*;
+use chrisomatic_spec::*;
+use chrisomatic_step::PendingStep;
+use petgraph::acyclic::Acyclic;
+use petgraph::data::Build;
 
-// pub(crate) trait DeserializeOwnedSize: DeserializeOwned + Sized {}
+pub(crate) fn plan(manifest: Manifest) -> DependencyTree<Rc<dyn PendingStep>> {
+    let mut tree = TreeBuilder::new();
+    let url = manifest.global.cube;
+    let users: HashMap<_, _> = manifest
+        .user
+        .into_iter()
+        .map(|(username, details)| add_steps_for_user(&mut tree, username, details, url.clone()))
+        .collect();
+    tree.into()
+}
 
-// pub(crate) type DynDeserialize = Box<dyn DeserializeOwned>;
+pub(crate) fn add_steps_for_user(
+    tree: &mut TreeBuilder,
+    username: Username,
+    details: UserDetails,
+    url: CubeUrl,
+) -> (Username, NodeIndex) {
+    let password = details.password.clone();
+    let details = Rc::new(details);
+    let exists = tree.add(
+        UserExists {
+            username: username.clone(),
+            details: Rc::clone(&details),
+            url: url.clone(),
+        },
+        vec![],
+    );
+    let auth_token = tree.add(
+        UserGetAuthToken {
+            username: username.clone(),
+            password,
+            url: url.clone(),
+        },
+        vec![exists],
+    );
+    let get_url = tree.add(
+        UserGetUrl {
+            username: username.clone(),
+            details: Rc::clone(&details),
+            url: url.clone(),
+        },
+        vec![auth_token],
+    );
+    let get_details = tree.add(
+        UserGetDetails {
+            url: url.clone(),
+            username: username.clone(),
+            details: Rc::clone(&details),
+        },
+        vec![get_url, auth_token],
+    );
+    tree.add(
+        UserDetailsFinalize {
+            username: username.clone(),
+            details,
+        },
+        vec![get_details, auth_token],
+    );
+    (username, auth_token)
+}
 
-// pub(crate) type DynStep = Box<dyn Step<Dep = Box<dyn Dependency>, Out = Box<dyn Dependency>>>;
+struct TreeBuilder(Dag<Rc<dyn PendingStep>>);
 
-// pub(crate) fn plan(manifest: &Manifest) -> DependencyTree<DynStep> {
-//     todo!()
-// }
+impl TreeBuilder {
+    fn new() -> Self {
+        Self(Acyclic::new())
+    }
+
+    fn add<T>(&mut self, pending_step: T, needs: Vec<NodeIndex>) -> NodeIndex
+    where
+        T: PendingStep + AsRef<dyn PendingStep> + 'static,
+    {
+        debug_assert!(
+            // seert that `pending_step`'s dependencies are satisfied by
+            // the nodes specified in `needs`
+            self.provides(&needs)
+                .is_superset(&crate::dependency_spy::dependencies_of(&pending_step))
+        );
+        let id = self.0.add_node(Rc::new(pending_step));
+        for need in needs {
+            self.0.try_add_edge(need, id, ()).unwrap();
+        }
+        id
+    }
+
+    /// Get a set of what dependencies can be provided by the specified nodes.
+    #[cfg(debug_assertions)]
+    fn provides<'a>(
+        &self,
+        needs: impl IntoIterator<Item = &'a NodeIndex>,
+    ) -> HashSet<chrisomatic_step::Dependency> {
+        needs
+            .into_iter()
+            .map(|id| self.0.node_weight(*id).unwrap())
+            .flat_map(|parent| crate::dependency_spy::provides_of(parent))
+            .collect()
+    }
+}
+
+impl From<TreeBuilder> for DependencyTree<Rc<dyn PendingStep>> {
+    fn from(value: TreeBuilder) -> Self {
+        DependencyTree(value.0)
+    }
+}

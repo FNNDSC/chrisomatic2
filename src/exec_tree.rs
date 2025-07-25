@@ -1,15 +1,14 @@
 use std::rc::Rc;
 
+use chrisomatic_step::{Dependency, Entries, PendingStep, Step};
 use futures_concurrency::stream::StreamGroup;
 use futures_lite::{Stream, StreamExt};
 
 use crate::{
-    dependency_map::Dependency,
     dependency_spy::target_of,
     dependency_tree::{DependencyTree, NodeIndex},
     exec_step::{Outcome, StepEffect, exec_step},
     state::DependencyHashMap,
-    step::{Entries, PendingStep, Step},
 };
 use async_stream::stream;
 

@@ -1,24 +1,18 @@
 use std::{cell::RefCell, collections::HashSet, rc::Rc};
 
-use crate::{
-    dependency_map::{Dependency, DependencyMap},
-    step::PendingStep,
-};
+use chrisomatic_step::{Dependency, DependencyMap, PendingStep};
 
 /// A [DependencyMap] used to inspect [PendingStep] implementations.
 pub(crate) struct DependencySpy(RefCell<HashSet<Dependency>>);
 
 impl DependencyMap for DependencySpy {
-    fn get(
-        &self,
-        k: crate::dependency_map::Dependency,
-    ) -> Result<std::rc::Rc<String>, crate::dependency_map::Dependency> {
+    fn get(&self, k: Dependency) -> Result<std::rc::Rc<String>, Dependency> {
         let mut set = self.0.borrow_mut();
         set.insert(k);
         Ok(Rc::new("".to_string()))
     }
 
-    fn contains_key(&self, _: &crate::dependency_map::Dependency) -> bool {
+    fn contains_key(&self, _: &Dependency) -> bool {
         false
     }
 }
@@ -45,8 +39,19 @@ pub(crate) fn target_of(pending_step: impl AsRef<dyn PendingStep>) -> Dependency
 }
 
 /// Get the dependencies of a [PendingStep].
+#[cfg(debug_assertions)]
 pub(crate) fn dependencies_of(pending_step: impl AsRef<dyn PendingStep>) -> HashSet<Dependency> {
     let spy = DependencySpy::new();
     let _step = pending_step.as_ref().build(&spy).unwrap().unwrap();
     spy.into_inner()
+}
+
+/// Get the value of [Step::provides] of the step corresponding to the [PendingStep].
+#[cfg(debug_assertions)]
+pub(crate) fn provides_of(
+    pending_step: impl AsRef<dyn PendingStep>,
+) -> nonempty::NonEmpty<Dependency> {
+    let spy = DependencySpy::new();
+    let step = pending_step.as_ref().build(&spy).unwrap().unwrap();
+    step.provides()
 }

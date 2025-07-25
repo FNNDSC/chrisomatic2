@@ -3,14 +3,14 @@ use petgraph::stable_graph::StableDiGraph;
 use petgraph::visit::{IntoNeighborsDirected, Topo, Walker};
 use petgraph::{Direction, acyclic::Acyclic};
 
-type Dag<T> = Acyclic<StableDiGraph<T, ()>>;
+pub(crate) type Dag<T> = Acyclic<StableDiGraph<T, ()>>;
 
 // HINT: a directed edge A->B means B depends on A.
 
 /// A directed acyclic graph (DAG) of computational jobs to run.
 ///
 /// `T` should be [Clone] so that it can be retrieved with a separate lifetime from the tree.
-pub(crate) struct DependencyTree<T>(Dag<T>);
+pub(crate) struct DependencyTree<T>(pub(crate) Dag<T>);
 
 impl<T> DependencyTree<T> {
     /// Count the number of nodes.
@@ -108,6 +108,6 @@ mod tests {
         assert!(!dep_tree.0.contains_node(e));
 
         assert!(dep_tree.after(b).is_empty());
-        assert_eq!(dep_tree.after(c), vec![(d, &'d')]);
+        assert_eq!(dep_tree.after(c), vec![(d, 'd')]);
     }
 }

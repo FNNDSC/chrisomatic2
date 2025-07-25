@@ -5,7 +5,7 @@ use nonempty::NonEmpty;
 use crate::dependency_map::{Dependency, DependencyMap, Entry};
 
 /// A `PendingStep` represents a [Step] with data dependencies.
-pub(crate) trait PendingStep {
+pub trait PendingStep {
     /// Provide the dependencies and create a [Step].
     ///
     /// - [Err] indicates the step has an unfulfilled dependency.
@@ -15,11 +15,11 @@ pub(crate) trait PendingStep {
 }
 
 /// Return type of [PendingStep::build].
-pub(crate) type PendingStepResult = Result<Option<Rc<dyn Step>>, Dependency>;
+pub type PendingStepResult = Result<Option<Rc<dyn Step>>, Dependency>;
 
 #[inline(always)]
 /// Convenience function to return [Step] from [PendingStep::build].
-pub(crate) fn ok_step(step: impl Step + 'static) -> PendingStepResult {
+pub fn ok_step(step: impl Step + 'static) -> PendingStepResult {
     Ok(Some(Rc::new(step)))
 }
 
@@ -29,8 +29,19 @@ pub(crate) fn ok_step(step: impl Step + 'static) -> PendingStepResult {
 /// 2. **modify** an existing resource to match the spec
 /// 3. **create** a resource matching the spec
 ///
-/// See [crate::exec_step::exec_step].
-pub(crate) trait Step {
+/// The implementation of step execution _should_:
+///
+/// 1. Call [Step::search] to produce an HTTP request
+/// 2. Send the HTTP request and call [Step::check_status] to decide what to do next.
+/// 3. If [StatusCheck::DoesNotExist] is returned by [Step::check_status], call
+///    [Step::create] and send the HTTP request to create the API resource.
+/// 4. Else if [StatusCheck::Exists] is returned by [Step::check_status], call
+///    [Step::deserialize] to decide what to do next.
+/// 5. If [Check::DoesNotExist] is returned by [Step::deserialize], call
+///    [Step::create] and send the HTTP request to create the API resource.
+/// 6. Else if [Check::NeedsModification] is returned by [Step::deserialize],
+///    call [Step::modify] and send the HTTP request to modify the API resource.
+pub trait Step {
     /// Create an HTTP request which searches the API for this resource.
     fn search(&self) -> reqwest::Request;
 
@@ -69,10 +80,10 @@ pub(crate) trait Step {
 }
 
 /// Multiple [Entry].
-pub(crate) type Entries = Vec<Entry>;
+pub type Entries = Vec<Entry>;
 
 /// An HTTP request and response body deserializer.
-pub(crate) trait StepRequest {
+pub trait StepRequest {
     /// Create the HTTP request.
     fn request(&self) -> reqwest::Request;
 
@@ -81,7 +92,7 @@ pub(crate) trait StepRequest {
 }
 
 /// Possible outcomes when checking for the existence of an API resource.
-pub(crate) enum Check {
+pub enum Check {
     /// The resource exists and is correct.
     Exists(Entries),
     /// The resource exists and was modified.
@@ -93,7 +104,7 @@ pub(crate) enum Check {
 }
 
 /// Status conveyed by HTTP response status code.
-pub(crate) enum StatusCheck {
+pub enum StatusCheck {
     /// The resource exists and its body should be checked.
     Exists,
     /// The resource does not exist and needs to be created.
