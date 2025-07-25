@@ -1,8 +1,8 @@
 use crate::{
+    dependency_map::{Dependency, DependencyMap},
     extra_models::RootResponse,
     request_builder::RequestBuilder,
     spec::*,
-    state::{Dependency, DependencyMap},
     step::*,
     types::*,
 };
@@ -19,7 +19,7 @@ pub(crate) struct UserExists {
 }
 
 impl PendingStep for UserExists {
-    fn build(&self, map: &DependencyMap) -> PendingStepResult {
+    fn build(&self, map: &dyn DependencyMap) -> PendingStepResult {
         debug_assert!(
             !map.contains_key(&Dependency::AuthToken(self.username.clone())),
             "Duplicate UserExists step for \"{}\"",
@@ -124,7 +124,7 @@ pub(crate) struct UserGetAuthToken {
 }
 
 impl PendingStep for UserGetAuthToken {
-    fn build(&self, map: &DependencyMap) -> PendingStepResult {
+    fn build(&self, map: &dyn DependencyMap) -> PendingStepResult {
         if map.contains_key(&Dependency::AuthToken(self.username.clone())) {
             return Ok(None);
         }
@@ -167,7 +167,7 @@ pub(crate) struct UserGetUrl {
 }
 
 impl PendingStep for UserGetUrl {
-    fn build(&self, map: &DependencyMap) -> PendingStepResult {
+    fn build(&self, map: &dyn DependencyMap) -> PendingStepResult {
         if map.contains_key(&Dependency::UserUrl(self.username.clone())) {
             Ok(None)
         } else if let Ok(auth_token) = map.get(Dependency::AuthToken(self.username.clone())) {
@@ -231,7 +231,7 @@ pub(crate) struct UserGetDetails {
 }
 
 impl PendingStep for UserGetDetails {
-    fn build(&self, map: &DependencyMap) -> PendingStepResult {
+    fn build(&self, map: &dyn DependencyMap) -> PendingStepResult {
         let user_url = map.get(Dependency::UserUrl(self.username.clone()));
         if user_url.is_ok()
             && map.contains_key(&Dependency::UserGroupsUrl(self.username.clone()))
@@ -290,7 +290,7 @@ pub(crate) struct UserSetEmail {
 }
 
 impl PendingStep for UserSetEmail {
-    fn build(&self, map: &DependencyMap) -> PendingStepResult {
+    fn build(&self, map: &dyn DependencyMap) -> PendingStepResult {
         let current_email = map.get(Dependency::UserEmail(self.username.clone()))?;
         if let Some(desired_email) = self.details.email.as_ref()
             && current_email.as_ref() != desired_email

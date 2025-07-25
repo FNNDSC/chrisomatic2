@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use crate::{
-    state::Dependency,
+    dependency_map::Dependency,
     step::{Check, Entries, StatusCheck, Step},
 };
 

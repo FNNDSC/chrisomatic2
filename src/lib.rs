@@ -1,3 +1,4 @@
+mod dependency_map;
 mod dependency_tree;
 mod exec_step;
 mod exec_tree;

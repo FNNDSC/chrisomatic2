@@ -4,9 +4,10 @@ use futures_concurrency::stream::StreamGroup;
 use futures_lite::{Stream, StreamExt};
 
 use crate::{
+    dependency_map::{Dependency, DependencyMap},
     dependency_tree::{DependencyTree, NodeIndex},
     exec_step::{StepEffect, exec_step},
-    state::{Dependency, DependencyMap},
+    state::DependencyHashMap,
     step::{Entries, PendingStep, Step},
 };
 use async_stream::stream;
@@ -37,7 +38,7 @@ pub(crate) async fn exec_tree(
     mut tree: DependencyTree<Rc<dyn PendingStep>>,
 ) -> impl Stream<Item = Outcome> {
     stream! {
-        let mut cache: DependencyMap = DependencyMap::with_capacity(tree.count() * 4);
+        let mut cache = DependencyHashMap::with_capacity(tree.count() * 4);
         let mut group = StreamGroup::new();
 
         // NOTE: using macro instead of closure or function to reduce verbosity

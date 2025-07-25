@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use crate::state::{Dependency, DependencyMap, Entry};
+use crate::dependency_map::{Dependency, DependencyMap, Entry};
 
 /// A `PendingStep` represents a [Step] with data dependencies.
 pub(crate) trait PendingStep {
@@ -9,7 +9,7 @@ pub(crate) trait PendingStep {
     /// - [Err] indicates the step has an unfulfilled dependency.
     /// - [None] indicates the step is redundant.
     /// - [Some] indicates the step can run.
-    fn build(&self, map: &DependencyMap) -> PendingStepResult;
+    fn build(&self, map: &dyn DependencyMap) -> PendingStepResult;
     /// Describe the target this [PendingStep] wants to create/modify.
     ///
     /// [None] indicates the step is for utility only and does not
