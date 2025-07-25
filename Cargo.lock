@@ -165,11 +165,13 @@ dependencies = [
  "chrisomatic_spec",
  "chrisomatic_step",
  "chrisomatic_step_macro",
+ "compact_str",
  "futures-concurrency",
  "futures-lite",
  "nonempty",
  "petgraph",
  "reqwest",
+ "rstest",
  "serde",
  "serde_json",
  "thiserror",
@@ -184,6 +186,7 @@ dependencies = [
  "reqwest",
  "rstest",
  "serde",
+ "thiserror",
  "toml",
 ]
 

@@ -49,3 +49,20 @@ pub struct Username(CompactString);
     Into,
 ))]
 pub struct Group(CompactString);
+
+#[nutype(derive(
+    Display,
+    Debug,
+    Clone,
+    Eq,
+    PartialEq,
+    Hash,
+    FromStr,
+    AsRef,
+    Deref,
+    Serialize,
+    Deserialize,
+    From,
+    Into,
+))]
+pub struct EmailDomain(CompactString);

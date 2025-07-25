@@ -5,6 +5,51 @@ use serde::{Deserialize, Serialize};
 
 use crate::{plugin_spec::PluginSpec, share_target::ShareTarget, types::*};
 
+/// User-supplied input chrisomatic manifest. See [crate::canonicalize].
+/// Compared to [Manifest], some fields are [Option] (for user convenience).
+#[derive(Default, Serialize, Deserialize, Debug, Clone)]
+pub struct GivenManifest {
+    pub global: Option<GivenGlobal>,
+    pub user: HashMap<Username, GivenUserDetails>,
+    pub userfiles: Vec<UserFileSpec>,
+    pub feeds: Vec<FeedSpec>,
+}
+
+/// User-supplied input for global configuration.
+#[derive(Default, Serialize, Deserialize, Debug, Clone)]
+pub struct GivenGlobal {
+    /// URL of ChRIS backend (required, but sometimes can be inferred).
+    pub cube: Option<CubeUrl>,
+    /// Admin user credentials (optional, but required for adding new plugins).
+    pub admin: Option<UserCredentials>,
+    /// Domain name to use for emails of users with unspecified email.
+    /// (Default: "example.org")
+    pub email_domain: Option<CompactString>,
+    /// Public CUBE from where to get plugins from.
+    /// (Default: "https://cube.chrisproject.org/api/v1/")
+    pub public_cube: Option<CubeUrl>,
+}
+
+/// Chrisomatic global configuration options.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Global {
+    /// URL of ChRIS backend.
+    pub cube: CubeUrl,
+    /// Admin user credentials.
+    pub admin: UserCredentials,
+    /// Domain name to use for emails of users with unspecified email.
+    pub email_domain: CompactString,
+    /// Public CUBE from where to get plugins from.
+    pub public_cube: CubeUrl,
+}
+
+/// Username and password.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct UserCredentials {
+    pub username: Username,
+    pub password: CompactString,
+}
+
 /// Chrisomatic manifest.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Manifest {
@@ -14,15 +59,18 @@ pub struct Manifest {
     pub feeds: Vec<FeedSpec>,
 }
 
-/// Chrisomatic global configuration options.
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Global {
-    pub cube: CubeUrl,
-}
-
 /// Chrisomatic user details.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct UserDetails {
+    pub password: String,
+    pub email: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub groups: Vec<String>,
+}
+
+/// Given user details.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct GivenUserDetails {
     pub password: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub email: Option<String>,
