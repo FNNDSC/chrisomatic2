@@ -4,7 +4,7 @@ use nutype::nutype;
 /// ChRIS backend API URL.
 #[nutype(
     validate(predicate = |s: &str| (s.starts_with("http://") || s.starts_with("https://") && s.ends_with("/api/v1/"))),
-    derive(Display, Debug, Clone, Eq, PartialEq, Hash, FromStr, AsRef, Deref, Serialize, Deserialize)
+    derive(Display, Debug, Clone, Eq, PartialEq, Hash, FromStr, AsRef, Deref, Serialize, Deserialize, Into)
 )]
 pub struct CubeUrl(String);
 
@@ -49,3 +49,20 @@ pub struct Username(CompactString);
     Into,
 ))]
 pub struct Group(CompactString);
+
+#[nutype(derive(
+    Display,
+    Debug,
+    Clone,
+    Eq,
+    PartialEq,
+    Hash,
+    FromStr,
+    AsRef,
+    Deref,
+    Serialize,
+    Deserialize,
+    From,
+    Into,
+))]
+pub struct EmailDomain(CompactString);

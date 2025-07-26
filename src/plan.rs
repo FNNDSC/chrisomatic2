@@ -112,3 +112,30 @@ impl From<TreeBuilder> for DependencyTree<Rc<dyn PendingStep>> {
         DependencyTree(value.0)
     }
 }
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+    use compact_str::CompactString;
+    use rstest::*;
+
+    #[rstest]
+    fn test_add_steps_for_user() {
+        todo!()
+    }
+
+    #[fixture]
+    fn user() -> (Username, UserDetails) {
+        let username = Username::new(CompactString::const_new("alice"));
+        let details = UserDetails {
+            password: "alice1234".to_string(),
+            email: Some("alice.test@example.org".to_string()),
+            groups: ["people", "pacs_users", "mri.team"]
+                .map(|s| s.to_string())
+                .into_iter()
+                .collect(),
+        };
+        (username, details)
+    }
+}
