@@ -105,7 +105,10 @@ pub(crate) enum StepEffect {
     Error(StepError),
 }
 
-pub(crate) struct Outcome {
-    pub(crate) target: Dependency,
-    pub(crate) effect: StepEffect,
+/// Outcome of running a [Step].
+pub struct Outcome {
+    /// Affected API resource.
+    pub target: Dependency,
+    /// Step effect.
+    pub effect: StepEffect,
 }

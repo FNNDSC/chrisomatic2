@@ -10,7 +10,7 @@ pub(crate) type Dag<T> = Acyclic<StableDiGraph<T, ()>>;
 /// A directed acyclic graph (DAG) of computational jobs to run.
 ///
 /// `T` should be [Clone] so that it can be retrieved with a separate lifetime from the tree.
-pub(crate) struct DependencyTree<T>(pub(crate) Dag<T>);
+pub struct DependencyTree<T>(pub(crate) Dag<T>);
 
 impl<T> DependencyTree<T> {
     /// Count the number of nodes.

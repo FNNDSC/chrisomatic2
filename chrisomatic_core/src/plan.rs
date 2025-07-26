@@ -8,7 +8,7 @@ use chrisomatic_step::PendingStep;
 use petgraph::acyclic::Acyclic;
 use petgraph::data::Build;
 
-pub(crate) fn plan(manifest: Manifest) -> DependencyTree<Rc<dyn PendingStep>> {
+pub fn plan(manifest: Manifest) -> DependencyTree<Rc<dyn PendingStep>> {
     let mut tree = TreeBuilder::new();
     let url = manifest.global.cube;
     let users: HashMap<_, _> = manifest
