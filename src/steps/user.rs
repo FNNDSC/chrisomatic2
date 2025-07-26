@@ -80,11 +80,7 @@ impl StepRequest for CreateUserRequest {
         let url = self.url.to_url().join("users/").unwrap();
         let body = models::UserRequest {
             username: Some(self.username.to_string()),
-            email: self
-                .details
-                .email
-                .clone()
-                .unwrap_or_else(|| format!("{}@example.org", self.username)),
+            email: self.details.email.to_string(),
             password: self.details.password.to_string(),
             is_staff: None, // very bad bad bad bad bad
         };
@@ -312,15 +308,13 @@ pub(crate) struct UserDetailsFinalize {
 impl PendingStep for UserDetailsFinalize {
     fn build(&self, map: &dyn DependencyMap) -> PendingStepResult {
         let current_email = map.get(Dependency::UserEmail(self.username.clone()))?;
-        if let Some(desired_email) = self.details.email.as_ref()
-            && current_email.as_ref() != desired_email
-        {
+        if *current_email != self.details.email {
             let step = UserDetailsFinalizeStep {
                 user_url: map.get(Dependency::UserUrl(self.username.clone()))?,
                 auth_token: map.get(Dependency::AuthToken(self.username.clone()))?,
                 username: self.username.clone(),
                 password: self.details.password.clone(),
-                email: desired_email.clone(),
+                email: self.details.email.clone(),
             };
             ok_step(step)
         } else {
