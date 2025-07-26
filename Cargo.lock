@@ -213,6 +213,7 @@ dependencies = [
  "chrisomatic_spec",
  "clap",
  "color-eyre",
+ "rstest",
  "toml",
 ]
 
