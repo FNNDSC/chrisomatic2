@@ -1,0 +1,37 @@
+name: Test
+
+env:
+  CARGO_TERM_COLOR: always
+
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - 'Cargo.*'
+      - '**/*.rs'
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Git checkout
+        uses: actions/checkout@v4
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Setup rust cache
+        uses: Swatinem/rust-cache@v2
+        # https://nexte.st/book/test-coverage.html
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Install nextest
+        uses: taiki-e/install-action@nextest
+      - name: Run tests
+        run: cargo llvm-cov nextest --locked --all-features --workspace --lcov --output-path lcov.info
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        if: always()
+        with:
+          fail_ci_if_error: true
+          files: ./lcov.info
+          token: ${{ secrets.CODECOV_TOKEN }}
