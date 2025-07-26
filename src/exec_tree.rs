@@ -14,6 +14,14 @@ use async_stream::stream;
 
 /// Execute steps from `tree` in topological ordering.
 ///
+/// When the returned [Stream] produces an item, it means that a step was
+/// finished (or that a [PendingStep] was determined to not run). The stream
+/// will produce the same number of items as the count of nodes in the given
+/// `tree`. When the item is [Some], it is conveyed that an API resource was
+/// checked/created/modified (and when the item is [None], the step was an
+/// intermediary dependency to get information for a later step that will
+/// check/create/modify a resource).
+///
 /// How it works: first, all steps without dependencies (as produced by
 /// [DependencyTree::start]) are executed. Whenever a step is finished,
 /// a [Outcome] is yielded by this stream, and the [Entries] produced
@@ -36,7 +44,7 @@ use async_stream::stream;
 pub(crate) async fn exec_tree(
     client: reqwest::Client,
     mut tree: DependencyTree<Rc<dyn PendingStep>>,
-) -> impl Stream<Item = Outcome> {
+) -> impl Stream<Item = Option<Outcome>> {
     stream! {
         let mut cache = DependencyHashMap::with_capacity(tree.count() * 4);
         let mut group = StreamGroup::new();
@@ -51,10 +59,10 @@ pub(crate) async fn exec_tree(
                     match pre_check {
                         PreCheck::Fulfilled => (),
                         PreCheck::Unfulfilled(dependency) => {
-                            yield Outcome {
+                            yield Some(Outcome {
                                 target: target_of(pending_step),
                                 effect: StepEffect::Unfulfilled(dependency)
-                            }
+                            })
                         }
                         PreCheck::Step(step) => {
                             let fut = exec_step_wrapper(&client, step, id);
@@ -70,9 +78,7 @@ pub(crate) async fn exec_tree(
 
         while let Some((id, outcome, outputs)) = group.next().await {
             cache.insert_all(outputs);
-            if let Some(outcome) = outcome {
-                yield outcome;
-            }
+            yield outcome;
             run_steps!(tree.after(id));
         }
     }
