@@ -20,7 +20,7 @@ pub struct GivenManifest {
 }
 
 /// User-supplied input for global configuration.
-#[derive(Default, Serialize, Deserialize, Debug, Clone)]
+#[derive(Default, Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct GivenGlobal {
     /// URL of ChRIS backend (required, but sometimes can be inferred).
     #[serde(skip_serializing_if = "Option::is_none")]
