@@ -9,8 +9,8 @@ use crate::types::*;
 /// Compared to [Manifest], some fields are [Option] (for user convenience).
 #[derive(Default, Serialize, Deserialize, Debug, Clone)]
 pub struct GivenManifest {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub global: Option<GivenGlobal>,
+    #[serde(skip_serializing_if = "GivenGlobal::is_none")]
+    pub global: GivenGlobal,
     #[serde(skip_serializing_if = "HashMap::is_empty")]
     pub user: HashMap<Username, GivenUserDetails>,
     // #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -38,6 +38,15 @@ pub struct GivenGlobal {
     pub public_cube: Option<CubeUrl>,
 }
 
+impl GivenGlobal {
+    pub fn is_none(&self) -> bool {
+        self.cube.is_none()
+            && self.admin.is_none()
+            && self.email_domain.is_none()
+            && self.public_cube.is_none()
+    }
+}
+
 /// Chrisomatic global configuration options.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct Global {
@@ -51,11 +60,28 @@ pub struct Global {
     pub public_cube: CubeUrl,
 }
 
-/// Username and password.
+/// Username and password/token.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct UserCredentials {
     pub username: Username,
-    pub password: CompactString,
+    #[serde(flatten)]
+    pub secret: PasswordOrToken,
+}
+
+impl UserCredentials {
+    pub fn basic_auth(username: impl Into<Username>, password: impl Into<String>) -> Self {
+        Self {
+            username: username.into(),
+            secret: PasswordOrToken::Password(password.into()),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum PasswordOrToken {
+    Password(String),
+    Token(String),
 }
 
 /// Chrisomatic manifest.

@@ -7,22 +7,19 @@ use pretty_assertions::assert_eq;
 #[test]
 fn test_canonicalize_empty() {
     let actual = canonicalize([]);
-    let expected = ManifestError::Missing(&["global"]);
+    let expected = ManifestError::Missing(&["global.cube"]);
     assert_eq!(actual, Err(expected));
 }
 
 #[test]
 fn test_canonicalize_no_global_cube() {
     let manifest = GivenManifest {
-        global: Some(GivenGlobal {
+        global: GivenGlobal {
             cube: None,
-            admin: Some(UserCredentials {
-                username: Username::new(CompactString::const_new("chris")),
-                password: CompactString::const_new("chris1234"),
-            }),
+            admin: Some(UserCredentials::basic_auth("chris", "chris1234")),
             email_domain: None,
             public_cube: None,
-        }),
+        },
         ..Default::default()
     };
     let actual = canonicalize([manifest]);
@@ -33,14 +30,14 @@ fn test_canonicalize_no_global_cube() {
 #[test]
 fn test_canonicalize_duplicate_user() {
     let manifest1 = GivenManifest {
-        global: Some(GivenGlobal {
+        global: GivenGlobal {
             cube: Some(CubeUrl::try_new("https://cube.example.org/api/v1/").unwrap()),
             ..Default::default()
-        }),
+        },
         user: create_users(["alice", "bobby"]),
     };
     let manifest2 = GivenManifest {
-        global: None,
+        global: Default::default(),
         user: create_users(["bobby", "samuel"]),
     };
     let actual = canonicalize([manifest1, manifest2]);
@@ -52,18 +49,15 @@ fn test_canonicalize_duplicate_user() {
 #[test]
 fn test_canonicalize_merge_users() {
     let manifest1 = GivenManifest {
-        global: Some(GivenGlobal {
+        global: GivenGlobal {
             cube: Some(CubeUrl::try_new("https://cube.example.org/api/v1/").unwrap()),
-            admin: Some(UserCredentials {
-                username: Username::new(CompactString::const_new("chris")),
-                password: CompactString::const_new("chris1234"),
-            }),
+            admin: Some(UserCredentials::basic_auth("chris", "chris1234")),
             ..Default::default()
-        }),
+        },
         user: create_users(["alice", "bobby"]),
     };
     let manifest2 = GivenManifest {
-        global: None,
+        global: Default::default(),
         user: create_users(["samuel", "washington"]),
     };
     let actual: HashSet<_> = canonicalize([manifest1, manifest2])

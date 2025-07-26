@@ -32,6 +32,12 @@ impl CubeUrl {
 ))]
 pub struct Username(CompactString);
 
+impl From<&'static str> for Username {
+    fn from(value: &'static str) -> Self {
+        Username::new(CompactString::const_new(value))
+    }
+}
+
 /// ChRIS group name.
 #[nutype(derive(
     Display,

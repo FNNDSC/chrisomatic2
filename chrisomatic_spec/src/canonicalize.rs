@@ -17,10 +17,7 @@ pub fn canonicalize(
 
 fn merge(a: GivenManifest, b: GivenManifest) -> Result<GivenManifest, ManifestError> {
     Ok(GivenManifest {
-        global: Some(merge_global(
-            a.global.unwrap_or_default(),
-            b.global.unwrap_or_default(),
-        )?),
+        global: merge_global(a.global, b.global)?,
         user: merge_users(a.user, b.user)?,
     })
 }
@@ -105,10 +102,7 @@ impl TryFrom<GivenManifest> for Manifest {
     type Error = ManifestError;
 
     fn try_from(value: GivenManifest) -> Result<Self, Self::Error> {
-        let global: Global = value
-            .global
-            .ok_or(ManifestError::Missing(&["global"]))?
-            .try_into()?;
+        let global: Global = value.global.try_into()?;
         let user = value
             .user
             .into_iter()
