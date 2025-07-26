@@ -19,7 +19,7 @@ pub(crate) fn plan(manifest: Manifest) -> DependencyTree<Rc<dyn PendingStep>> {
     tree.into()
 }
 
-pub(crate) fn add_steps_for_user(
+fn add_steps_for_user(
     tree: &mut TreeBuilder,
     username: Username,
     details: UserDetails,
@@ -116,14 +116,35 @@ impl From<TreeBuilder> for DependencyTree<Rc<dyn PendingStep>> {
 #[cfg(test)]
 mod tests {
 
+    use crate::dependency_spy::provides_of;
+
     use super::*;
+    use chrisomatic_step::Dependency;
     use compact_str::CompactString;
     use rstest::*;
 
-    // #[rstest]
-    // fn test_add_steps_for_user() {
-    //     todo!()
-    // }
+    #[rstest]
+    fn test_add_steps_for_user(user: (Username, UserDetails), cube_url: CubeUrl) {
+        let (username, details) = user;
+        let mut tree = TreeBuilder::new();
+        let (username, token_id) = add_steps_for_user(&mut tree, username, details, cube_url);
+        let pending_step_for_token = tree.0.node_weight(token_id).unwrap();
+
+        let provides = provides_of(pending_step_for_token);
+        assert!(provides.contains(&Dependency::AuthToken(username.clone())));
+
+        let start = DependencyTree::from(tree).start();
+        let start_provides: HashSet<_> = start
+            .into_iter()
+            .map(|(_id, pending_step)| pending_step)
+            .flat_map(provides_of)
+            .collect();
+        assert!(
+            start_provides.contains(&Dependency::UserExists(username)),
+            "Starting steps for user must provide a Dependency::UserExists, but does not, instead: {:?}",
+            start_provides
+        )
+    }
 
     #[fixture]
     fn user() -> (Username, UserDetails) {
@@ -137,5 +158,10 @@ mod tests {
                 .collect(),
         };
         (username, details)
+    }
+
+    #[fixture]
+    fn cube_url() -> CubeUrl {
+        CubeUrl::try_new("https://example.com:12345/api/v1/").unwrap()
     }
 }
