@@ -8,7 +8,7 @@ on:
     branches: [ master ]
     paths:
       - 'Cargo.*'
-      - '**/*.rs'
+      - 'chrisomatic_*/src/**'
   pull_request:
 
 jobs:

@@ -1,7 +1,11 @@
 [package]
 name = "chrisomatic"
-version = "0.1.0"
+description = "ChRIS automatic setup tool"
+repository = "https://github.com/FNNDSC/chrisomatic2"
+version = "2.0.0-alpha.1"
 edition = "2024"
+license = "MIT"
+categories = ["science::neuroscience", "science", "command-line-utilities", "development-tools"]
 
 [dependencies]
 chrisomatic_spec = { path = "../chrisomatic_spec" }
@@ -13,3 +17,12 @@ rstest = { version = "0.25.0", default-features = false }
 which = "8.0.0"
 serde_json = "1.0.141"
 serde = { version = "1.0.219", features = ["derive"] }
+camino = "1.1.10"
+tokio = { version = "1.47.0", features = ["full"] }
+fs-err = { version = "3.1.1", features = ["tokio"] }
+tokio-stream = { version = "0.1.17", features = ["fs"] }
+futures = "0.3.31"
+
+[dev-dependencies]
+serial_test = "*"
+tempfile = "3.20.0"

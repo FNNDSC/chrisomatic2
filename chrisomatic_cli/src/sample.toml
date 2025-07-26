@@ -1,0 +1,38 @@
+# chrisomatic.toml: `chrisomatic` manifest file.
+# 
+# `chrisomatic` is a tool for provisioning a _ChRIS_ backend with starting
+# data for development, testing, or demo purposes. For more information
+# about _ChRIS_, see our website at https://chrisproject.org
+# 
+# This file is a TOML-formatted file. See https://toml.io/en/
+# `chrisomatic` also supports JSON or YAML if you don't like TOML.
+
+# Global configuration section.
+# ------------------------------------------------------------
+#
+# NOTE: in most situations, this section is optional. If `chrisomatic`
+# is running...
+#
+# - In CLI: `global.cube` can be detected automatically if _ChRIS_ backend
+#   is found running on localhost in a Docker or Podman container, and
+#   `global.admin.password` will be set to the value of the container's
+#   `CHRIS_SUPERUSER_PASSWORD` environment variable.
+# - In a web app: `global.cube` will default to whatever _ChRIS_ backend
+#   the web app is connected to. If the web user is authenticated as an
+#   admin user, their auth token will be used for `global.admin.token`.
+[global]
+
+# API URL of ChRIS backend. _Usually_ optional.
+cube = "http://localhost:8000/api/v1/"
+
+# ChRIS superuser. Required to add plugins, otherwise optional.
+admin = { username = "chris", password = "chris1234" }
+
+# Users configuration section.
+# ------------------------------------------------------------
+
+# Users are declared as `[user.{username}]`
+[user.alice]
+password = "alice1234"       # required
+email = "alice@example.org"  # optional, default is `{username}@example.org`
+groups = ["example_group", "pacs_users"]  # optional
