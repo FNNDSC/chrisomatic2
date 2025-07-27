@@ -14,7 +14,7 @@ pub struct DependencyTree<T>(pub(crate) Dag<T>);
 
 impl<T> DependencyTree<T> {
     /// Count the number of nodes.
-    pub(crate) fn count(&self) -> usize {
+    pub fn count(&self) -> usize {
         self.0.node_count()
     }
 }

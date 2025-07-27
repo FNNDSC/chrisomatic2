@@ -74,7 +74,7 @@ async fn exec_step_impl(
 }
 
 #[derive(thiserror::Error, Debug)]
-pub(crate) enum StepError {
+pub enum StepError {
     #[error("Will not try to create resource which should have already been created: {0}")]
     Uncreatable(reqwest::Url),
     #[error("Resource cannot be modified: {0}")]
@@ -92,7 +92,8 @@ pub(crate) enum StepError {
 }
 
 /// The effect a step has had on the API state.
-pub(crate) enum StepEffect {
+#[derive(Debug)]
+pub enum StepEffect {
     /// A resource was created.
     Created,
     /// A resource was found.
@@ -106,9 +107,20 @@ pub(crate) enum StepEffect {
 }
 
 /// Outcome of running a [Step].
+#[derive(Debug)]
 pub struct Outcome {
     /// Affected API resource.
     pub target: Dependency,
     /// Step effect.
     pub effect: StepEffect,
+}
+
+impl Outcome {
+    /// Returns `true` if the effect is OK.
+    pub fn ok(&self) -> bool {
+        matches!(
+            &self.effect,
+            StepEffect::Created | StepEffect::Unmodified | StepEffect::Modified
+        )
+    }
 }

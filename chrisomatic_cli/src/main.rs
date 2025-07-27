@@ -1,14 +1,16 @@
-mod cli;
+mod canonicalize;
 mod container_engine;
 mod default_files;
+mod exec;
 mod read_inputs;
 mod sample;
 
 use std::path::PathBuf;
 
+use canonicalize::canonicalize;
 use clap::Parser;
-use cli::canonicalize;
 use default_files::default_files;
+use exec::exec_with_progress;
 use read_inputs::read_inputs;
 
 #[derive(Parser)]
@@ -39,8 +41,11 @@ async fn main() -> color_eyre::Result<()> {
 
     let given = read_inputs(&files).await?;
     let manifest = canonicalize(given)?;
-    dbg!(manifest);
+    let counts = exec_with_progress(manifest).await?;
 
+    if counts.error + counts.unfulfilled > 0 {
+        color_eyre::eyre::bail!("There were errors and/or unfulfilled steps.");
+    }
     Ok(())
 }
 

@@ -41,7 +41,7 @@ use async_stream::stream;
 ///   [Outcome::Unfulfilled] will follow.
 /// - If a [Outcome::Unfulfilled] appears without a preceeding [Outcome::Error],
 ///   it means there is a bug in [crate::plan].
-pub async fn exec_tree(
+pub fn exec_tree(
     client: reqwest::Client,
     mut tree: DependencyTree<Rc<dyn PendingStep>>,
 ) -> impl Stream<Item = Option<Outcome>> {

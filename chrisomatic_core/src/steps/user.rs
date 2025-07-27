@@ -4,7 +4,7 @@ use chrisomatic_spec::*;
 use chrisomatic_step::*;
 use chrisomatic_step_macro::AsRefPendingStep;
 use nonempty::{NonEmpty, nonempty};
-use reqwest::{Method, Request, Url};
+use reqwest::{Method, Request, StatusCode, Url};
 use std::rc::Rc;
 
 /// A [PendingStep] to make sure that a user exists. See [UserExistsStep].
@@ -44,6 +44,16 @@ impl Step for UserExistsStep {
             .json(&body)
             .unwrap()
             .accept_json()
+    }
+
+    fn check_status(&self, status: reqwest::StatusCode) -> StatusCheck {
+        if status == StatusCode::BAD_REQUEST {
+            StatusCheck::DoesNotExist
+        } else if status.is_success() {
+            StatusCheck::Exists
+        } else {
+            StatusCheck::Error
+        }
     }
 
     fn deserialize(&self, body: bytes::Bytes) -> serde_json::Result<Check> {
@@ -126,11 +136,6 @@ impl PendingStep for UserGetAuthToken {
         if map.contains_key(&Dependency::AuthToken(self.username.clone())) {
             return Ok(None);
         }
-        debug_assert!(
-            !map.contains_key(&Dependency::UserUrl(self.username.clone())),
-            "UserGetAuthToken must come after UserExists for \"{}\"",
-            &self.username
-        );
         ok_step(UserGetAuthTokenStep(self.clone()))
     }
 }
