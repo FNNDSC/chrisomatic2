@@ -1,6 +1,5 @@
 pub(crate) use petgraph::graph::NodeIndex;
 use petgraph::stable_graph::StableDiGraph;
-use petgraph::visit::{IntoNeighborsDirected, Topo, Walker};
 use petgraph::{Direction, acyclic::Acyclic};
 
 pub(crate) type Dag<T> = Acyclic<StableDiGraph<T, ()>>;
@@ -17,16 +16,20 @@ impl<T> DependencyTree<T> {
     pub fn count(&self) -> usize {
         self.0.node_count()
     }
+
+    /// Create a new `DependencyTree`.
+    pub fn new(dag: Dag<T>) -> Self {
+        Self(dag)
+    }
 }
 
 impl<T: Clone> DependencyTree<T> {
     /// Get the "roots" of the DAG, i.e. all nodes which have no dependencies.
     pub(crate) fn start(&self) -> Vec<(NodeIndex, T)> {
-        Topo::new(self.0.inner())
-            .iter(self.0.inner())
-            .filter_map(|i| self.0.inner().node_weight(i).map(|w| (i, w)))
-            .take_while(|(i, _)| self.is_ready(*i))
-            .map(|(i, w)| (i, w.clone()))
+        self.0
+            .node_indices()
+            .filter(|i| self.is_ready(*i))
+            .filter_map(|i| self.0.node_weight(i).map(|w| (i, w.clone())))
             .collect()
     }
 
@@ -72,19 +75,21 @@ mod tests {
         let c = graph.add_node('c');
         let d = graph.add_node('d');
         let e = graph.add_node('e');
+        let f = graph.add_node('f');
         /*
          *       a  e
-         *      / \
-         *     b   c
+         *      / \  \
+         *     b   c  f
          *          \
          *           d
          */
         graph.try_add_edge(a, b, ()).unwrap();
         graph.try_add_edge(a, c, ()).unwrap();
         graph.try_add_edge(c, d, ()).unwrap();
+        graph.try_add_edge(e, f, ()).unwrap();
 
         let mut dep_tree = DependencyTree(graph);
-        assert_eq!(dep_tree.count(), 5);
+        assert_eq!(dep_tree.count(), 6);
 
         assert!(dep_tree.is_ready(a));
         assert!(dep_tree.is_ready(e));
@@ -103,9 +108,14 @@ mod tests {
         assert!(dep_tree.0.contains_node(b));
         assert!(dep_tree.0.contains_node(c));
         assert!(dep_tree.0.contains_node(d));
+        assert!(dep_tree.0.contains_node(e));
+        assert!(dep_tree.0.contains_node(f));
 
-        assert!(dep_tree.after(e).is_empty());
+        assert_eq!(dep_tree.after(e), vec![(f, 'f')]);
         assert!(!dep_tree.0.contains_node(e));
+        assert!(dep_tree.0.contains_node(f));
+        assert!(dep_tree.after(f).is_empty());
+        assert!(!dep_tree.0.contains_node(f));
 
         assert!(dep_tree.after(b).is_empty());
         assert_eq!(dep_tree.after(c), vec![(d, 'd')]);

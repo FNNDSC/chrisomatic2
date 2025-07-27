@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use chrisomatic_step::{Dependency, Entries, PendingStep, Step};
-use futures_concurrency::stream::StreamGroup;
+use futures_concurrency::future::FutureGroup;
 use futures_lite::{Stream, StreamExt};
 
 use crate::{
@@ -47,7 +47,7 @@ pub fn exec_tree(
 ) -> impl Stream<Item = Outcome> {
     stream! {
         let mut cache = DependencyHashMap::with_capacity(tree.count() * 4);
-        let mut group = StreamGroup::new();
+        let mut group = FutureGroup::new();
 
         // NOTE: using macro instead of closure or function to reduce verbosity
         //       of type and lifetime annotations, also to work around the
@@ -55,43 +55,51 @@ pub fn exec_tree(
         macro_rules! run_steps {
             ($pending_steps:expr) => {
                 for (id, pending_step) in $pending_steps {
-                    let pre_check: PreCheck<_> = pending_step.build(&cache).into();
-                    match pre_check {
-                        PreCheck::Fulfilled => (),
-                        PreCheck::Unfulfilled(dependency) => {
-                            yield Outcome {
-                                target: target_of(pending_step),
-                                effect: StepEffect::Unfulfilled(dependency)
-                            }
-                        }
-                        PreCheck::Step(step) => {
-                            let fut = exec_step_wrapper(&client, step, id);
-                            let stream = futures_lite::stream::once_future(Box::pin(fut));
-                            group.insert(stream);
-                        }
-                    }
+                    let target = target_of(&pending_step);
+                    let pre_check = pending_step.build(&cache).into();
+                    let fut = exec_step_wrapper(&client, target, pre_check, id);
+                    group.insert(Box::pin(fut));
                 }
             };
         }
 
         run_steps!(tree.start());
-
         while let Some((id, outcome, outputs)) = group.next().await {
             cache.insert_all(outputs);
             yield outcome;
             run_steps!(tree.after(id));
         }
+        debug_assert_eq!(tree.count(), 0);
     }
 }
 
-/// Wraps [exec_step] to wrangle its return types.
+/// Wraps [exec_step] to wrangle its parameter and return types.
 async fn exec_step_wrapper(
     client: &reqwest::Client,
-    step: Rc<dyn Step>,
+    target: Dependency,
+    pre_check: PreCheck<Rc<dyn Step>>,
     id: NodeIndex,
 ) -> (NodeIndex, Outcome, Entries) {
-    let (outcome, outputs) = exec_step(client, step).await;
-    (id, outcome, outputs)
+    match pre_check {
+        PreCheck::Fulfilled => {
+            let outcome = Outcome {
+                target,
+                effect: StepEffect::Unmodified,
+            };
+            (id, outcome, vec![])
+        }
+        PreCheck::Unfulfilled(dependency) => {
+            let outcome = Outcome {
+                target,
+                effect: StepEffect::Unfulfilled(dependency),
+            };
+            (id, outcome, vec![])
+        }
+        PreCheck::Step(step) => {
+            let (outcome, outputs) = exec_step(client, step).await;
+            (id, outcome, outputs)
+        }
+    }
 }
 
 /// Flattened enum for return value of [PendingStep::build].
