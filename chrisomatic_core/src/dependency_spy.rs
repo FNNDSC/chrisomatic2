@@ -29,13 +29,7 @@ impl DependencySpy {
 
 /// Get the value of [crate::step::Step::description] or the first item of [crate::step::Step::provides] corresponding to the given [PendingStep].
 pub(crate) fn target_of(pending_step: impl AsRef<dyn PendingStep>) -> Dependency {
-    let spy = DependencySpy::new();
-    let step = pending_step.as_ref().build(&spy).unwrap().unwrap();
-    if let Some(target) = step.description() {
-        target
-    } else {
-        step.provides().head
-    }
+    provides_of(pending_step).head
 }
 
 /// Get the dependencies of a [PendingStep].
@@ -47,7 +41,6 @@ pub(crate) fn dependencies_of(pending_step: impl AsRef<dyn PendingStep>) -> Hash
 }
 
 /// Get the value of [Step::provides] of the step corresponding to the [PendingStep].
-#[cfg(debug_assertions)]
 pub(crate) fn provides_of(
     pending_step: impl AsRef<dyn PendingStep>,
 ) -> nonempty::NonEmpty<Dependency> {

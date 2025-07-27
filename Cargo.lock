@@ -218,6 +218,7 @@ dependencies = [
  "camino",
  "chrisomatic_core",
  "chrisomatic_spec",
+ "chrisomatic_step",
  "clap",
  "color-eyre",
  "fs-err",

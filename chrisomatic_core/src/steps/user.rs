@@ -160,7 +160,10 @@ impl Step for UserGetAuthTokenStep {
     }
 
     fn provides(&self) -> NonEmpty<Dependency> {
-        nonempty![Dependency::AuthToken(self.0.username.clone())]
+        nonempty![
+            Dependency::UserExists(self.0.username.clone()),
+            Dependency::AuthToken(self.0.username.clone())
+        ]
     }
 }
 
@@ -209,7 +212,9 @@ impl Step for UserGetUrlStep {
     fn search(&self) -> reqwest::Request {
         let mut url = self.url.to_url();
         url.set_query(Some("limit=1"));
-        Request::new(Method::GET, url).accept_json()
+        Request::new(Method::GET, url)
+            .auth_token(self.auth_token.as_str())
+            .accept_json()
     }
 
     fn deserialize(&self, body: bytes::Bytes) -> serde_json::Result<Check> {
@@ -230,7 +235,10 @@ impl Step for UserGetUrlStep {
     }
 
     fn provides(&self) -> NonEmpty<Dependency> {
-        nonempty![Dependency::UserUrl(self.username.clone())]
+        nonempty![
+            Dependency::UserExists(self.username.clone()),
+            Dependency::UserUrl(self.username.clone())
+        ]
     }
 }
 
@@ -295,6 +303,7 @@ impl Step for UserGetDetailsStep {
 
     fn provides(&self) -> NonEmpty<Dependency> {
         nonempty![
+            Dependency::UserExists(self.username.clone()),
             Dependency::UserUrl(self.username.clone()),
             Dependency::UserGroupsUrl(self.username.clone()),
             Dependency::UserEmail(self.username.clone()),
@@ -374,25 +383,13 @@ impl Step for UserDetailsFinalizeStep {
     }
 
     fn deserialize(&self, body: bytes::Bytes) -> serde_json::Result<Check> {
-        deserialize_user_response(&self.username, body)
-            .map(finalize_email)
-            .map(Check::Modified)
+        deserialize_user_response(&self.username, body).map(Check::Modified)
     }
 
     fn provides(&self) -> NonEmpty<Dependency> {
-        nonempty![Dependency::UserEmailFinal(self.username.clone())]
+        nonempty![
+            Dependency::UserExists(self.username.clone()),
+            Dependency::UserEmail(self.username.clone())
+        ]
     }
-}
-
-/// Change [Dependency::UserEmail] to [Dependency::UserEmailFinal].
-fn finalize_email(mut entries: Entries) -> Entries {
-    entries.iter_mut().for_each(|entry| {
-        if let Dependency::UserEmail(username) = &entry.0 {
-            *entry = (
-                Dependency::UserEmailFinal(username.clone()),
-                entry.1.clone(),
-            );
-        }
-    });
-    entries
 }

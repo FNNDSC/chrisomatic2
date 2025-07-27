@@ -8,6 +8,7 @@ license = "MIT"
 categories = ["science::neuroscience", "science", "command-line-utilities", "development-tools"]
 
 [dependencies]
+chrisomatic_step = { path = "../chrisomatic_step" }
 chrisomatic_spec = { path = "../chrisomatic_spec" }
 chrisomatic_core = { path = "../chrisomatic_core" }
 toml = "0.9.2"

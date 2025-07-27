@@ -17,8 +17,8 @@ pub trait PendingStep {
 /// Return type of [PendingStep::build].
 pub type PendingStepResult = Result<Option<Rc<dyn Step>>, Dependency>;
 
-#[inline(always)]
 /// Convenience function to return [Step] from [PendingStep::build].
+#[inline(always)]
 pub fn ok_step(step: impl Step + 'static) -> PendingStepResult {
     Ok(Some(Rc::new(step)))
 }
@@ -68,15 +68,16 @@ pub trait Step {
     }
 
     /// Returns keys of what this step provides unconditionally when successful.
-    fn provides(&self) -> NonEmpty<Dependency>;
-
-    /// Describe the API resource affected by this step.
     ///
-    /// [None] indicates the step is for utility only and does not
-    /// correspond to the creation or modification of an API resource.
-    fn description(&self) -> Option<Dependency> {
-        None
-    }
+    /// The first item returned is considered to be the "primary" API resource
+    /// affected by this step. It will be used for tracking what was created/
+    /// modified/unchanged. For example, [crate::UserDetailsFinalizeStep]
+    /// sets a user's email. The primary logical API model affected on the
+    /// backend here is a user, so [Dependency::UserExists] is the first item
+    /// returned. The step [crate::UserDetailsFinalizeStep] also returns
+    /// [Dependency::UserEmail] because it is a second piece of output data
+    /// in addition to confirming the user's existence.
+    fn provides(&self) -> NonEmpty<Dependency>;
 }
 
 /// Multiple [Entry].

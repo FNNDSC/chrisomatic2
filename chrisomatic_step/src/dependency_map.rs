@@ -13,7 +13,6 @@ pub enum Dependency {
     UserUrl(Username),
     UserGroupsUrl(Username),
     UserEmail(Username),
-    UserEmailFinal(Username),
     AuthToken(Username),
     PluginUrl(PluginSpec),
 }

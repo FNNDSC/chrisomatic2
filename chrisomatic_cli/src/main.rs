@@ -43,7 +43,7 @@ async fn main() -> color_eyre::Result<()> {
     let manifest = canonicalize(given)?;
     let counts = exec_with_progress(manifest).await?;
 
-    if counts.error + counts.unfulfilled > 0 {
+    if !counts.all_ok() {
         color_eyre::eyre::bail!("There were errors and/or unfulfilled steps.");
     }
     Ok(())

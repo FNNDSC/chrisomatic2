@@ -9,23 +9,19 @@ use chrisomatic_step::{Check, Dependency, Entries, StatusCheck, Step};
 /// 2. [Step::deserialize] decides what to do next.
 /// 3. If the resource needs to be created, call [Step::create]. Or, if the resource
 ///    needs to be modified, calll [Step::modify].
-pub(crate) async fn exec_step(
-    client: &reqwest::Client,
-    step: Rc<dyn Step>,
-) -> (Option<Outcome>, Entries) {
-    let description = step.description();
-    let provides = step.provides().head;
+pub(crate) async fn exec_step(client: &reqwest::Client, step: Rc<dyn Step>) -> (Outcome, Entries) {
+    let target = step.provides().head;
     match exec_step_impl(client, step).await {
         Ok((effect, outputs)) => {
-            let outcome = description.map(|target| Outcome { target, effect });
+            let outcome = Outcome { target, effect };
             (outcome, outputs)
         }
         Err(e) => {
             let outcome = Outcome {
-                target: description.unwrap_or(provides),
+                target,
                 effect: StepEffect::Error(e),
             };
-            (Some(outcome), vec![])
+            (outcome, vec![])
         }
     }
 }

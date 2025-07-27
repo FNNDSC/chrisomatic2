@@ -44,7 +44,7 @@ use async_stream::stream;
 pub fn exec_tree(
     client: reqwest::Client,
     mut tree: DependencyTree<Rc<dyn PendingStep>>,
-) -> impl Stream<Item = Option<Outcome>> {
+) -> impl Stream<Item = Outcome> {
     stream! {
         let mut cache = DependencyHashMap::with_capacity(tree.count() * 4);
         let mut group = StreamGroup::new();
@@ -59,10 +59,10 @@ pub fn exec_tree(
                     match pre_check {
                         PreCheck::Fulfilled => (),
                         PreCheck::Unfulfilled(dependency) => {
-                            yield Some(Outcome {
+                            yield Outcome {
                                 target: target_of(pending_step),
                                 effect: StepEffect::Unfulfilled(dependency)
-                            })
+                            }
                         }
                         PreCheck::Step(step) => {
                             let fut = exec_step_wrapper(&client, step, id);
@@ -89,7 +89,7 @@ async fn exec_step_wrapper(
     client: &reqwest::Client,
     step: Rc<dyn Step>,
     id: NodeIndex,
-) -> (NodeIndex, Option<Outcome>, Entries) {
+) -> (NodeIndex, Outcome, Entries) {
     let (outcome, outputs) = exec_step(client, step).await;
     (id, outcome, outputs)
 }
