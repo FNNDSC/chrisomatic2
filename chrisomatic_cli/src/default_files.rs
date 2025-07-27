@@ -45,7 +45,7 @@ pub(crate) async fn default_files() -> color_eyre::Result<Vec<PathBuf>> {
             Ok(files)
         }
         Err(e) => {
-            if e.kind() == std::io::ErrorKind::NotADirectory {
+            if matches!(e.kind(), ErrorKind::NotADirectory | ErrorKind::NotFound) {
                 color_eyre::eyre::bail!(
                     "chrisomatic.toml is not a file and chrisomatic.d is not a directory"
                 );

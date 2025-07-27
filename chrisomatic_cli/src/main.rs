@@ -1,12 +1,14 @@
 mod cli;
 mod container_engine;
 mod default_files;
+mod read_inputs;
 mod sample;
 
 use std::path::PathBuf;
 
 use clap::Parser;
 use default_files::default_files;
+use read_inputs::read_inputs;
 
 #[derive(Parser)]
 #[command(version, about)]
@@ -21,6 +23,7 @@ struct Cli {
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> color_eyre::Result<()> {
+    install_eyre_hook()?;
     let args = Cli::parse();
     if args.sample {
         println!("{}", crate::sample::SAMPLE_TOML);
@@ -33,7 +36,18 @@ async fn main() -> color_eyre::Result<()> {
         args.files
     };
 
-    println!("{files:?}");
+    let given = read_inputs(&files).await?;
+    println!("{given:?}");
 
     Ok(())
+}
+
+fn install_eyre_hook() -> color_eyre::Result<()> {
+    #[cfg(debug_assertions)]
+    let display_location = true;
+    #[cfg(not(debug_assertions))]
+    let display_location = false;
+    color_eyre::config::HookBuilder::blank()
+        .display_location_section(display_location)
+        .install()
 }

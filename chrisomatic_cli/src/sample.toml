@@ -5,7 +5,6 @@
 # about _ChRIS_, see our website at https://chrisproject.org
 # 
 # This file is a TOML-formatted file. See https://toml.io/en/
-# `chrisomatic` also supports JSON or YAML if you don't like TOML.
 
 # Global configuration section.
 # ------------------------------------------------------------

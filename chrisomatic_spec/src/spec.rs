@@ -14,9 +14,9 @@ use crate::types::*;
 /// then convert to [Manifest] with [TryFrom].
 #[derive(Default, Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct GivenManifest {
-    #[serde(skip_serializing_if = "GivenGlobal::is_none")]
+    #[serde(default, skip_serializing_if = "GivenGlobal::is_none")]
     pub global: GivenGlobal,
-    #[serde(skip_serializing_if = "HashMap::is_empty")]
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub user: HashMap<Username, GivenUserDetails>,
     // #[serde(skip_serializing_if = "Vec::is_empty")]
     // pub userfiles: Vec<UserFileSpec>,
@@ -104,7 +104,7 @@ pub struct GivenUserDetails {
     pub password: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub email: Option<String>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub groups: Vec<String>,
 }
 
@@ -113,7 +113,7 @@ pub struct GivenUserDetails {
 pub struct UserDetails {
     pub password: String,
     pub email: String,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub groups: Vec<String>,
 }
 
