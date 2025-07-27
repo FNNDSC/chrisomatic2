@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use crate::dependency_tree::{Dag, DependencyTree, NodeIndex};
@@ -80,12 +80,14 @@ impl TreeBuilder {
     where
         T: PendingStep + AsRef<dyn PendingStep> + 'static,
     {
-        debug_assert!(
-            // seert that `pending_step`'s dependencies are satisfied by
+        #[cfg(debug_assertions)]
+        {
+            // assert that `pending_step`'s dependencies are satisfied by
             // the nodes specified in `needs`
-            self.provides(&needs)
-                .is_superset(&crate::dependency_spy::dependencies_of(&pending_step))
-        );
+            let provided = self.provides(&needs);
+            let needed = crate::dependency_spy::dependencies_of(&pending_step);
+            debug_assert!(provided.is_superset(&needed));
+        }
         let id = self.0.add_node(Rc::new(pending_step));
         for need in needs {
             self.0.try_add_edge(need, id, ()).unwrap();
@@ -98,7 +100,7 @@ impl TreeBuilder {
     fn provides<'a>(
         &self,
         needs: impl IntoIterator<Item = &'a NodeIndex>,
-    ) -> HashSet<chrisomatic_step::Dependency> {
+    ) -> std::collections::HashSet<chrisomatic_step::Dependency> {
         needs
             .into_iter()
             .map(|id| self.0.node_weight(*id).unwrap())
