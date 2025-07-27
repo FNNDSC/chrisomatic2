@@ -4,15 +4,11 @@ use compact_str::CompactString;
 
 use crate::{spec::*, types::*};
 
-/// Canonicalize multiple [GivenManifest] into [Manifest], merging values and filling
-/// in defaults where applicable.
-pub fn canonicalize(
+/// Merge multiple [GivenManifest] into one.
+pub fn reduce(
     values: impl IntoIterator<Item = GivenManifest>,
-) -> Result<Manifest, ManifestError> {
-    values
-        .into_iter()
-        .try_fold(Default::default(), merge)
-        .and_then(|m| m.try_into())
+) -> Result<GivenManifest, ManifestError> {
+    values.into_iter().try_fold(Default::default(), merge)
 }
 
 fn merge(a: GivenManifest, b: GivenManifest) -> Result<GivenManifest, ManifestError> {

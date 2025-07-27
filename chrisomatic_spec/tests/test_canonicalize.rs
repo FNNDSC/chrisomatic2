@@ -5,14 +5,15 @@ use compact_str::CompactString;
 use pretty_assertions::assert_eq;
 
 #[test]
-fn test_canonicalize_empty() {
-    let actual = canonicalize([]);
+fn test_convert_empty() {
+    let empty: GivenManifest = Default::default();
+    let actual: Result<Manifest, _> = empty.try_into();
     let expected = ManifestError::Missing(&["global.cube"]);
     assert_eq!(actual, Err(expected));
 }
 
 #[test]
-fn test_canonicalize_no_global_cube() {
+fn test_convert_no_cube() {
     let manifest = GivenManifest {
         global: GivenGlobal {
             cube: None,
@@ -22,13 +23,13 @@ fn test_canonicalize_no_global_cube() {
         },
         ..Default::default()
     };
-    let actual = canonicalize([manifest]);
+    let actual: Result<Manifest, _> = manifest.try_into();
     let expected = ManifestError::Missing(&["global.cube"]);
     assert_eq!(actual, Err(expected));
 }
 
 #[test]
-fn test_canonicalize_duplicate_user() {
+fn test_reduce_duplicate_user() {
     let manifest1 = GivenManifest {
         global: GivenGlobal {
             cube: Some(CubeUrl::try_new("https://cube.example.org/api/v1/").unwrap()),
@@ -40,14 +41,14 @@ fn test_canonicalize_duplicate_user() {
         global: Default::default(),
         user: create_users(["bobby", "samuel"]),
     };
-    let actual = canonicalize([manifest1, manifest2]);
+    let actual = reduce([manifest1, manifest2]);
     let duplicate = Username::new(CompactString::const_new("bobby"));
     let expected = ManifestError::DuplicateUser(duplicate);
     assert_eq!(actual, Err(expected));
 }
 
 #[test]
-fn test_canonicalize_merge_users() {
+fn test_reduce_multiple_users() {
     let manifest1 = GivenManifest {
         global: GivenGlobal {
             cube: Some(CubeUrl::try_new("https://cube.example.org/api/v1/").unwrap()),
@@ -60,7 +61,7 @@ fn test_canonicalize_merge_users() {
         global: Default::default(),
         user: create_users(["samuel", "washington"]),
     };
-    let actual: HashSet<_> = canonicalize([manifest1, manifest2])
+    let actual: HashSet<_> = reduce([manifest1, manifest2])
         .unwrap()
         .user
         .into_keys()

@@ -5,9 +5,14 @@ use serde::{Deserialize, Serialize};
 
 use crate::types::*;
 
-/// User-supplied input chrisomatic manifest. See [crate::canonicalize].
-/// Compared to [Manifest], some fields are [Option] (for user convenience).
-#[derive(Default, Serialize, Deserialize, Debug, Clone)]
+/// User-supplied input chrisomatic manifest. Similar to [Manifest], but with
+/// many fields being [Option] (for user convenience).
+///
+/// ## Developer Hints
+///
+/// Combine multiple [GivenManifest] into one with [crate::reduce],
+/// then convert to [Manifest] with [TryFrom].
+#[derive(Default, Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct GivenManifest {
     #[serde(skip_serializing_if = "GivenGlobal::is_none")]
     pub global: GivenGlobal,
@@ -94,7 +99,7 @@ pub struct Manifest {
 }
 
 /// Given user details.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct GivenUserDetails {
     pub password: String,
     #[serde(skip_serializing_if = "Option::is_none")]
