@@ -1,4 +1,9 @@
-use std::{collections::HashMap, ffi::OsString, net::SocketAddrV4, process::Command};
+use std::{
+    collections::HashMap,
+    ffi::OsString,
+    net::{Ipv4Addr, SocketAddrV4},
+    process::Command,
+};
 
 use color_eyre::eyre::{Context, bail};
 
@@ -33,7 +38,15 @@ impl ContainerEngine {
         &self,
         container_id: impl AsRef<str>,
     ) -> color_eyre::Result<ContainerDetails> {
-        todo!()
+        let args = [
+            "inspect",
+            "--format",
+            r#"{ "PortBindings": {{ json .HostConfig.PortBindings }}, "Env": {{ json .Config.Env }} }"#,
+            container_id.as_ref(),
+        ];
+        let output = self.cmd(&args)?;
+        let data: ContainerInspect = serde_json::from_str(&output)?;
+        Ok(data.try_into()?)
     }
 
     fn cmd(&self, args: &[&str]) -> color_eyre::Result<String> {
@@ -48,6 +61,17 @@ impl ContainerEngine {
                 )
             })?;
         if !output.status.success() {
+            // NOTE: if docker daemon is not running, that's OK, just move on.
+            if output
+                .stderr
+                .starts_with(b"Cannot connect to the Docker daemon")
+                && output
+                    .stderr
+                    .trim_ascii_end()
+                    .ends_with(b"Is the docker daemon running?")
+            {
+                return Ok("".to_string());
+            }
             bail!(
                 "Command `{} {}` exited with status {}",
                 self.0.to_string_lossy(),
@@ -88,7 +112,11 @@ impl TryFrom<ContainerHostSocketAddr> for SocketAddrV4 {
     type Error = color_eyre::Report;
 
     fn try_from(value: ContainerHostSocketAddr) -> Result<Self, Self::Error> {
-        let ip = value.host_ip.parse()?;
+        let ip = if value.host_ip.is_empty() {
+            Ipv4Addr::new(127, 0, 0, 1)
+        } else {
+            value.host_ip.parse()?
+        };
         let port = value.host_port.parse()?;
         Ok(SocketAddrV4::new(ip, port))
     }

@@ -136,7 +136,7 @@ mod tests {
         assert!(provides.contains(&Dependency::AuthToken(username.clone())));
 
         let start = DependencyTree::from(tree).start();
-        let start_provides: HashSet<_> = start
+        let start_provides: std::collections::HashSet<_> = start
             .into_iter()
             .map(|(_id, pending_step)| pending_step)
             .flat_map(provides_of)

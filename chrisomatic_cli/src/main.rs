@@ -7,6 +7,7 @@ mod sample;
 use std::path::PathBuf;
 
 use clap::Parser;
+use cli::canonicalize;
 use default_files::default_files;
 use read_inputs::read_inputs;
 
@@ -37,7 +38,8 @@ async fn main() -> color_eyre::Result<()> {
     };
 
     let given = read_inputs(&files).await?;
-    println!("{given:?}");
+    let manifest = canonicalize(given)?;
+    dbg!(manifest);
 
     Ok(())
 }

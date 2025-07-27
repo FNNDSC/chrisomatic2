@@ -1,4 +1,5 @@
-use chrisomatic_spec::{CubeUrl, GivenGlobal, UserCredentials};
+use chrisomatic_spec::{CubeUrl, GivenGlobal, GivenManifest, Manifest, UserCredentials};
+use color_eyre::eyre::Context;
 
 use crate::container_engine::{ContainerDetails, ContainerEngine};
 
@@ -6,9 +7,21 @@ const CUBE_CONTAINER_PORT: &'static str = "8000/tcp";
 const CUBE_IMAGE_CONTAINS: &'static str = "/fnndsc/cube:";
 const CUBE_SUPERUSER_ENV: &'static str = "CHRIS_SUPERUSER_PASSWORD";
 
+/// Convert [GivenManifest] to [Manifest], auto-filling values for `global`
+/// from a locally running CUBE if needed.
+///
+/// WARNING: does blocking I/O.
+pub(crate) fn canonicalize(mut given: GivenManifest) -> color_eyre::Result<Manifest> {
+    given.global = guess_global_config(given.global)?;
+    Ok(given.try_into()?)
+}
+
 fn guess_global_config(given: GivenGlobal) -> color_eyre::Result<GivenGlobal> {
     if given.is_none() {
-        infer_global_from_running_container()
+        infer_global_from_running_container().with_context(
+            ||
+            "Trying to infer `global` configuration from ChRIS backend running in local container",
+        )
     } else {
         Ok(given)
     }
