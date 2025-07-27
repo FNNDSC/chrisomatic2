@@ -24,7 +24,7 @@ pub(crate) async fn exec_with_progress(manifest: Manifest) -> color_eyre::Result
         pb.inc(1);
         counts.add(outcome);
         pb.set_message(counts.short_msg());
-        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        // tokio::time::sleep(std::time::Duration::from_secs(1)).await;
     }
     // pb.finish_with_message(counts.final_report());
     pb.finish_and_clear();
@@ -79,7 +79,7 @@ impl Count {
     fn unmodified(&self) -> impl Display {
         self.0
             .values()
-            .filter(|e| matches!(e, StepEffect::Modified))
+            .filter(|e| matches!(e, StepEffect::Unmodified))
             .count()
             .green()
             .to_string()
