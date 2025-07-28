@@ -8,6 +8,7 @@ mod sample;
 use std::path::PathBuf;
 
 use canonicalize::canonicalize;
+use chrisomatic_core::StepEffect;
 use clap::Parser;
 use default_files::default_files;
 use exec::exec_with_progress;
@@ -41,9 +42,12 @@ async fn main() -> color_eyre::Result<()> {
 
     let given = read_inputs(&files).await?;
     let manifest = canonicalize(given)?;
-    let counts = exec_with_progress(manifest).await?;
+    let effects = exec_with_progress(manifest).await?;
 
-    if !counts.all_ok() {
+    if effects
+        .into_values()
+        .any(|e| matches!(e, StepEffect::Unfulfilled(_) | StepEffect::Error(_)))
+    {
         color_eyre::eyre::bail!("There were errors and/or unfulfilled steps.");
     }
     Ok(())

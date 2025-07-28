@@ -312,6 +312,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "chrisomatic_web"
+version = "0.1.0"
+dependencies = [
+ "chrisomatic_core",
+ "chrisomatic_spec",
+ "js-sys",
+ "reqwest",
+ "toml",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+]
+
+[[package]]
 name = "chrono"
 version = "0.4.41"
 source = "registry+https://github.com/rust-lang/crates.io-index"
