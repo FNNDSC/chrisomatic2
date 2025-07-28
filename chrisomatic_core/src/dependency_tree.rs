@@ -28,21 +28,6 @@ impl<T: Clone> DependencyTree<T> {
             .collect()
     }
 
-    // pub(crate) fn dbg(&self)
-    // where
-    //     T: AsRef<dyn chrisomatic_step::PendingStep>,
-    // {
-    //     let iter = Topo::new(self.0.inner()).iter(self.0.inner());
-    //     for i in iter {
-    //         let pending_step = self.0.node_weight(i).unwrap();
-    //         eprintln!(
-    //             "{i:?} provides {:?} and depends on {:?}",
-    //             crate::dependency_spy::provides_of(pending_step),
-    //             crate::dependency_spy::dependencies_of(pending_step),
-    //         )
-    //     }
-    // }
-
     /// Returns `true` if the node has no dependencies.
     fn is_ready(&self, n: NodeIndex) -> bool {
         self.0

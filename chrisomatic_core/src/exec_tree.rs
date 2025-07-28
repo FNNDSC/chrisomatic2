@@ -54,20 +54,27 @@ pub fn exec_tree(
         //       restrictions of where `yield` can appear inside the `stream!`
         macro_rules! run_steps {
             ($pending_steps:expr) => {
+                eprintln!("run_steps: {:?}", $pending_steps.iter().map(|t| t.0).collect::<Vec<_>>());
                 for (id, pending_step) in $pending_steps {
+                    eprintln!("pre_check {id:?}");
                     let pre_check: PreCheck<_> = pending_step.build(&cache).into();
                     match pre_check {
-                        PreCheck::Fulfilled => (),
+                        PreCheck::Fulfilled => {
+                            eprintln!("{id:?} is already fulfilled");
+                        },
                         PreCheck::Unfulfilled(dependency) => {
+                            eprintln!("{id:?} has unmet dependencies");
                             yield Outcome {
                                 target: target_of(pending_step),
                                 effect: StepEffect::Unfulfilled(dependency)
                             }
                         }
                         PreCheck::Step(step) => {
+                            eprintln!("want to enqueue {id:?}");
                             let fut = exec_step_wrapper(&client, step, id);
                             let stream = futures_lite::stream::once_future(Box::pin(fut));
                             group.insert(stream);
+                            eprintln!("enqueued {id:?}");
                         }
                     }
                 }
@@ -75,12 +82,12 @@ pub fn exec_tree(
         }
 
         run_steps!(tree.start());
-
         while let Some((id, outcome, outputs)) = group.next().await {
             cache.insert_all(outputs);
             yield outcome;
             run_steps!(tree.after(id));
         }
+        debug_assert_eq!(tree.count(), 0);
     }
 }
 
@@ -113,5 +120,14 @@ impl<T> From<Result<Option<T>, Dependency>> for PreCheck<T> {
             },
             Err(e) => PreCheck::Unfulfilled(e),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    #[tokio::test]
+    async fn test_exec_tree() {
+        assert_eq!(1, 1)
     }
 }
