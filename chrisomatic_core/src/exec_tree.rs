@@ -122,12 +122,3 @@ impl<T> From<Result<Option<T>, Dependency>> for PreCheck<T> {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-
-    #[tokio::test]
-    async fn test_exec_tree() {
-        assert_eq!(1, 1)
-    }
-}
