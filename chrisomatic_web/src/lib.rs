@@ -1,4 +1,4 @@
-use chrisomatic_core::{Counts, fully_exec_tree, plan};
+use chrisomatic_core::{Counts, StepEffect, fully_exec_tree, plan};
 use chrisomatic_spec::*;
 use wasm_bindgen::prelude::*;
 
@@ -19,6 +19,8 @@ pub fn validate_manifest(
 /// Apply the changes specified by `text`, which is expected to be a
 /// TOML-formatted _chrisomatic_ manifest (hint: validate it with
 /// [validate_manifest]).
+///
+/// Returns list of error messages describing failed steps.
 #[wasm_bindgen]
 pub async fn run_chrisomatic(
     text: &str,
@@ -26,16 +28,26 @@ pub async fn run_chrisomatic(
     username: &str,
     token: &str,
     on_progress: &js_sys::Function,
-) -> Result<(), String> {
+) -> Result<Vec<String>, String> {
     let manifest = canonicalize_manifest(text, url, username, token).map_err(|e| e.to_string())?;
     let tree = plan(manifest);
     let client = reqwest::Client::new();
-    let _affected = fully_exec_tree(client, tree, |counts| {
+    let affected = fully_exec_tree(client, tree, |counts| {
         let this = JsValue::null();
         let _ = on_progress.call1(&this, &counts_to_object(counts));
     })
     .await;
-    Ok(())
+    let error_messages = affected
+        .into_iter()
+        .filter_map(|(target, effect)| {
+            if matches!(&effect, StepEffect::Unfulfilled(..) | StepEffect::Error(_)) {
+                Some(format!("{target:?} not created because {effect:?}"))
+            } else {
+                None
+            }
+        })
+        .collect();
+    Ok(error_messages)
 }
 
 #[allow(unused_must_use)]
