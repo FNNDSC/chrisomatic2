@@ -142,7 +142,7 @@ impl TryFrom<GivenGlobal> for Global {
             ]))?,
             email_domain: value
                 .email_domain
-                .unwrap_or_else(|| CompactString::const_new("@example.org")),
+                .unwrap_or_else(|| CompactString::const_new("example.org")),
             public_cube: value.public_cube.unwrap_or_else(|| {
                 CubeUrl::try_new("https://cube.chrisproject.org/api/v1/").unwrap()
             }),
