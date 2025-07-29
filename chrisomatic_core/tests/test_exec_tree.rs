@@ -104,8 +104,8 @@ impl Step for NeverStep {
         Resource::User(self.0.to_compact_string().into())
     }
 
-    fn effect(&self) -> EffectKind {
-        EffectKind::Created
+    fn effect(&self) -> StepEffect {
+        StepEffect::Created
     }
 
     fn deserialize(&self, _: bytes::Bytes) -> serde_json::Result<Entries> {
@@ -137,8 +137,8 @@ impl Step for TestStep {
         Resource::User(self.dummy_username())
     }
 
-    fn effect(&self) -> EffectKind {
-        EffectKind::Unmodified
+    fn effect(&self) -> StepEffect {
+        StepEffect::Unmodified
     }
 
     fn deserialize(&self, body: bytes::Bytes) -> serde_json::Result<Entries> {

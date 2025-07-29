@@ -11,7 +11,7 @@ pub(crate) async fn exec_step(
     request: Request,
 ) -> (Outcome, Entries) {
     let target = step.affects();
-    let effect = step.effect().into();
+    let effect = step.effect();
     match exec_step_impl(client, step, request).await {
         Ok(outputs) => {
             let outcome = Outcome { target, effect };

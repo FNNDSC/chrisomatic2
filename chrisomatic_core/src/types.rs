@@ -102,27 +102,6 @@ pub enum StepEffect {
     Error(StepError),
 }
 
-/// Possible effects a successful request from a [Step].
-#[derive(Clone, Copy, Debug)]
-pub enum EffectKind {
-    /// The resource was created.
-    Created,
-    /// The resource exists and is correct.
-    Unmodified,
-    /// The resource exists and was modified.
-    Modified,
-}
-
-impl From<EffectKind> for StepEffect {
-    fn from(value: EffectKind) -> Self {
-        match value {
-            EffectKind::Created => StepEffect::Created,
-            EffectKind::Unmodified => StepEffect::Unmodified,
-            EffectKind::Modified => StepEffect::Modified,
-        }
-    }
-}
-
 /// Outcome of running a [Step].
 #[derive(Debug)]
 pub struct Outcome {
@@ -163,7 +142,7 @@ pub trait Step {
     fn affects(&self) -> Resource;
 
     /// Indicate how the API resource is affected by this step if successful.
-    fn effect(&self) -> EffectKind;
+    fn effect(&self) -> StepEffect;
 
     /// Check whether the HTTP response is OK.
     fn check_status(&self, status: reqwest::StatusCode) -> bool {
