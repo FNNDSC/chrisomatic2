@@ -1,8 +1,8 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
-use compact_str::CompactString;
+use compact_str::{CompactString, ToCompactString};
 
-use crate::{spec::*, types::*};
+use crate::{PluginSpec, spec::*, types::*};
 
 /// Merge multiple [GivenManifest] into one.
 pub fn reduce(
@@ -12,9 +12,14 @@ pub fn reduce(
 }
 
 fn merge(a: GivenManifest, b: GivenManifest) -> Result<GivenManifest, ManifestError> {
+    let mut plugins = a.plugins;
+    let mut b_plugins = b.plugins;
+    plugins.append(&mut b_plugins);
     Ok(GivenManifest {
         global: merge_global(a.global, b.global)?,
         user: merge_users(a.user, b.user)?,
+        compute_resource: merge_maps(a.compute_resource, b.compute_resource, "compute_resource")?,
+        plugins,
     })
 }
 
@@ -23,7 +28,7 @@ fn merge_global(a: GivenGlobal, b: GivenGlobal) -> Result<GivenGlobal, ManifestE
         cube: none_xor(a.cube, b.cube, "global.cube")?,
         admin: merge_credentials(a.admin, b.admin)?,
         email_domain: none_xor(a.email_domain, b.email_domain, "global.email_domain")?,
-        public_cube: none_xor(a.public_cube, b.public_cube, "global.public_cube")?,
+        peer: none_xor(a.peer, b.peer, "global.public_cube")?,
     })
 }
 
@@ -67,6 +72,23 @@ fn none_xor<T: Into<String>>(
     }
 }
 
+fn merge_maps<K: std::hash::Hash + Eq + std::string::ToString, V>(
+    mut a: HashMap<K, V>,
+    b: HashMap<K, V>,
+    key: &'static str,
+) -> Result<HashMap<K, V>, ManifestError> {
+    for (k, v) in b.into_iter() {
+        if a.get(&k).is_some() {
+            return Err(ManifestError::RepeatedValue {
+                key,
+                value: k.to_string(),
+            });
+        }
+        a.insert(k, v);
+    }
+    Ok(a)
+}
+
 fn merge_users<T>(
     mut a: HashMap<Username, T>,
     b: HashMap<Username, T>,
@@ -92,6 +114,10 @@ pub enum ManifestError {
         a: String,
         b: String,
     },
+    #[error("Duplicate plugin: {}", .0.to_compact_string())]
+    DuplicatePlugin(PluginSpec),
+    #[error("Multiple definitions for {key}.{value}")]
+    RepeatedValue { key: &'static str, value: String },
 }
 
 impl TryFrom<GivenManifest> for Manifest {
@@ -121,9 +147,12 @@ impl TryFrom<GivenManifest> for Manifest {
                 },
             )
             .collect();
+        validate_no_duplicate_plugins(&value.plugins)?;
         Ok(Manifest {
             global,
             user,
+            compute_resource: value.compute_resource,
+            plugins: value.plugins,
             // userfiles: value.userfiles,
             // feeds: value.feeds,
         })
@@ -143,9 +172,25 @@ impl TryFrom<GivenGlobal> for Global {
             email_domain: value
                 .email_domain
                 .unwrap_or_else(|| CompactString::const_new("example.org")),
-            public_cube: value.public_cube.unwrap_or_else(|| {
-                CubeUrl::try_new("https://cube.chrisproject.org/api/v1/").unwrap()
-            }),
+            peer: value.peer,
         })
     }
+}
+
+fn validate_no_duplicate_plugins(plugins: &[PluginConfig]) -> Result<(), ManifestError> {
+    plugins
+        .iter()
+        .try_fold(HashSet::with_capacity(plugins.len()), |mut set, p| {
+            let plugin = PluginSpec {
+                name: p.name.clone(),
+                version: p.version.clone(),
+            };
+            if set.contains(&plugin) {
+                Err(ManifestError::DuplicatePlugin(plugin))
+            } else {
+                set.insert(plugin);
+                Ok(set)
+            }
+        })
+        .map(|_| ())
 }

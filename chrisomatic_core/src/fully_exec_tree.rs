@@ -1,18 +1,17 @@
 use std::{collections::HashMap, rc::Rc};
 
-use crate::{DependencyTree, exec_tree::exec_tree};
-use chrisomatic_step::{Dependency, PendingStep};
+use crate::dependency_tree::DependencyTree;
+use crate::exec_tree::exec_tree;
+use crate::types::*;
 use futures_lite::StreamExt;
-
-use crate::exec_step::{Outcome, StepEffect};
 
 /// Runs [exec_tree] to completion, calling `on_progress` once each time a step finishes.
 /// A summary of affected API resources is returned.
 pub async fn fully_exec_tree(
     client: reqwest::Client,
-    tree: DependencyTree<Rc<dyn PendingStep>>,
+    tree: DependencyTree<Rc<dyn Step>>,
     on_progress: impl Fn(Counts),
-) -> HashMap<Dependency, StepEffect> {
+) -> HashMap<Resource, StepEffect> {
     let mut effects = ChrisomaticEffects::with_capacity(tree.count());
     let stream = exec_tree(client, tree);
     futures_lite::pin!(stream);
@@ -55,7 +54,7 @@ impl<'a> FromIterator<&'a StepEffect> for Counts {
     }
 }
 
-pub struct ChrisomaticEffects(HashMap<Dependency, StepEffect>);
+pub struct ChrisomaticEffects(HashMap<Resource, StepEffect>);
 
 impl ChrisomaticEffects {
     /// Create a new [HashMap] with the specified capacity.

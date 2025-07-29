@@ -14,14 +14,56 @@ use crate::types::*;
 /// then convert to [Manifest] with [TryFrom].
 #[derive(Default, Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct GivenManifest {
+    /// Global configuration options.
     #[serde(default, skip_serializing_if = "GivenGlobal::is_none")]
     pub global: GivenGlobal,
+
+    /// User accounts.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub user: HashMap<Username, GivenUserDetails>,
+
+    /// Configuration of _ChRIS_ backend compute resources.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub compute_resource: HashMap<ComputeResourceName, ComputeResource>,
+
+    /// List of plugins to register.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub plugins: Vec<PluginConfig>,
     // #[serde(skip_serializing_if = "Vec::is_empty")]
     // pub userfiles: Vec<UserFileSpec>,
     // #[serde(skip_serializing_if = "Vec::is_empty")]
     // pub feeds: Vec<FeedSpec>,
+}
+
+/// Configuration of a [pfcon](https://github.com/FNNDSC/pfcon) to be
+/// registered as a compute resource of _ChRIS_ backend.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct ComputeResource {
+    pub url: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auth_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub innetwork: Option<bool>,
+    pub user: String,
+    pub password: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_job_exec_seconds: Option<String>,
+}
+
+/// Configuration of a plugin to register.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct PluginConfig {
+    /// Plugin name.
+    pub name: CompactString,
+    /// Plugin version ([None] if use any plugin version).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<CompactString>,
+    /// Name of compute resources to register this plugin to.
+    /// If unspecified or empty, register the plugin to all compute resources.
+    #[serde(alias = "computes", default, skip_serializing_if = "Vec::is_empty")]
+    pub compute_resources: Vec<ComputeResourceName>,
 }
 
 /// User-supplied input for global configuration.
@@ -39,8 +81,8 @@ pub struct GivenGlobal {
     pub email_domain: Option<CompactString>,
     /// Public CUBE from where to get plugins from.
     /// (Default: "https://cube.chrisproject.org/api/v1/")
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub public_cube: Option<CubeUrl>,
+    #[serde(skip_serializing_if = "Option::is_none", default = "public_cube")]
+    pub peer: Option<CubeUrl>,
 }
 
 impl GivenGlobal {
@@ -48,7 +90,7 @@ impl GivenGlobal {
         self.cube.is_none()
             && self.admin.is_none()
             && self.email_domain.is_none()
-            && self.public_cube.is_none()
+            && self.peer.is_none()
     }
 }
 
@@ -62,7 +104,12 @@ pub struct Global {
     /// Domain name to use for emails of users with unspecified email.
     pub email_domain: CompactString,
     /// Public CUBE from where to get plugins from.
-    pub public_cube: CubeUrl,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub peer: Option<CubeUrl>,
+}
+
+fn public_cube() -> Option<CubeUrl> {
+    CubeUrl::try_new("https://cube.chrisproject.org/api/v1/").ok()
 }
 
 /// Username and password/token.
@@ -82,6 +129,7 @@ impl UserCredentials {
     }
 }
 
+/// Password or token for user authentication.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum PasswordOrToken {
@@ -96,6 +144,13 @@ pub struct Manifest {
     pub user: HashMap<Username, UserDetails>,
     // pub userfiles: Vec<UserFileSpec>,
     // pub feeds: Vec<FeedSpec>,
+    /// Configuration of _ChRIS_ backend compute resources.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub compute_resource: HashMap<ComputeResourceName, ComputeResource>,
+
+    /// List of plugins to register.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub plugins: Vec<PluginConfig>,
 }
 
 /// Given user details.

@@ -3,38 +3,37 @@ use chris_oag::models;
 use chrisomatic_spec::*;
 use chrisomatic_step::*;
 use chrisomatic_step_macro::AsRefPendingStep;
-use nonempty::{NonEmpty, nonempty};
 use reqwest::{Method, Request, StatusCode, Url};
 use std::rc::Rc;
 
-/// A [PendingStep] to make sure that a user exists. See [UserExistsStep].
+/// A [PendingStep] for [UserGetAuthTokenStep].
 #[derive(Debug, Clone, AsRefPendingStep)]
-pub(crate) struct UserExists {
+pub(crate) struct UserTryGetAuthToken {
     pub(crate) username: Username,
     pub(crate) details: Rc<UserDetails>,
     pub(crate) url: CubeUrl,
 }
 
-impl PendingStep for UserExists {
+impl PendingStep for UserTryGetAuthToken {
     fn build(&self, map: &dyn DependencyMap) -> PendingStepResult {
         debug_assert!(
             !map.contains_key(&Dependency::AuthToken(self.username.clone())),
-            "Duplicate UserExists step for \"{}\"",
+            "Duplicate step for \"{}\"",
             &self.username
         );
-        ok_step(UserExistsStep(self.clone()))
+        ok_step(UserTryGetAuthTokenStep(self.clone()))
+    }
+
+    fn affects(&self) -> Resource {
+        Resource::User(self.username.clone())
     }
 }
 
-/// A [Step] to make sure a user exists. It either:
-///
-/// - Obtains the user's [Dependency::AuthToken]
-/// - Creates the user, producing the [Dependency::UserUrl], [Dependency::UserGroupsUrl],
-///   and [Dependency::UserEmail].
-pub(crate) struct UserExistsStep(UserExists);
+/// A [Step] to get an auth token for a user who may or may not exist.
+pub(crate) struct UserTryGetAuthTokenStep(UserTryGetAuthToken);
 
-impl Step for UserExistsStep {
-    fn search(&self) -> reqwest::Request {
+impl Step for UserTryGetAuthTokenStep {
+    fn request(&self) -> reqwest::Request {
         let url = self.0.url.to_url().join("auth-token/").unwrap();
         let body = models::AuthTokenRequest {
             username: self.0.username.to_string(),
@@ -46,52 +45,52 @@ impl Step for UserExistsStep {
             .accept_json()
     }
 
-    fn check_status(&self, status: reqwest::StatusCode) -> StatusCheck {
-        if status == StatusCode::BAD_REQUEST {
-            StatusCheck::DoesNotExist
-        } else if status.is_success() {
-            StatusCheck::Exists
-        } else {
-            StatusCheck::Error
-        }
+    fn check_status(&self, status: reqwest::StatusCode) -> bool {
+        // BAD_REQUEST means user might not exist yet. No worries, a
+        // subsequent step will try to create the user.
+        status == StatusCode::BAD_REQUEST || status.is_success()
     }
 
-    fn deserialize(&self, body: bytes::Bytes) -> serde_json::Result<Check> {
-        deserialize_auth_token(&self.0.username, body).map(Check::Exists)
+    fn deserialize(&self, body: bytes::Bytes) -> serde_json::Result<(EffectKind, Entries)> {
+        deserialize_auth_token(&self.0.username, body).map(|e| (EffectKind::Unmodified, e))
     }
 
-    fn create(&self) -> Option<Box<dyn StepRequest>> {
-        Some(Box::new(CreateUserRequest::from(self.0.clone())))
-    }
-
-    fn provides(&self) -> NonEmpty<Dependency> {
-        nonempty![Dependency::UserExists(self.0.username.clone())]
+    fn provides(&self) -> Vec<Dependency> {
+        vec![Dependency::User(self.0.username.clone())]
     }
 }
 
-pub(crate) struct CreateUserRequest {
+#[derive(Clone, Debug)]
+pub(crate) struct UserCreate {
     url: CubeUrl,
     username: Username,
     details: Rc<UserDetails>,
 }
 
-impl From<UserExists> for CreateUserRequest {
-    fn from(value: UserExists) -> Self {
-        CreateUserRequest {
-            username: value.username,
-            url: value.url,
-            details: value.details,
+impl PendingStep for UserCreate {
+    fn build(&self, map: &dyn DependencyMap) -> PendingStepResult {
+        if map.contains_key(&Dependency::AuthToken(self.username.clone()))
+            || map.contains_key(&Dependency::UserUrl(self.username.clone()))
+        {
+            return Ok(None);
         }
+        ok_step(UserCreateStep(self.clone()))
+    }
+
+    fn affects(&self) -> Resource {
+        todo!()
     }
 }
 
-impl StepRequest for CreateUserRequest {
+pub(crate) struct UserCreateStep(UserCreate);
+
+impl Step for UserCreateStep {
     fn request(&self) -> reqwest::Request {
-        let url = self.url.to_url().join("users/").unwrap();
+        let url = self.0.url.to_url().join("users/").unwrap();
         let body = models::UserRequest {
-            username: Some(self.username.to_string()),
-            email: self.details.email.to_string(),
-            password: self.details.password.to_string(),
+            username: Some(self.0.username.to_string()),
+            email: self.0.details.email.to_string(),
+            password: self.0.details.password.to_string(),
             is_staff: None, // very bad bad bad bad bad
         };
         Request::new(Method::POST, url)
@@ -100,21 +99,33 @@ impl StepRequest for CreateUserRequest {
             .accept_json()
     }
 
-    fn deserialize(&self, body: bytes::Bytes) -> serde_json::Result<Entries> {
-        deserialize_user_response(&self.username, body)
+    fn deserialize(&self, body: bytes::Bytes) -> serde_json::Result<(EffectKind, Entries)> {
+        deserialize_user_response(&self.username, body).map(|e| (EffectKind::Created, e))
+    }
+
+    fn provides(&self) -> Vec<Dependency> {
+        vec![
+            (Dependency::UserUrl(self.0.username.clone())),
+            (Dependency::UserEmail(self.0.username.clone())),
+            (Dependency::UserGroupsUrl(self.0.username.clone())),
+        ]
     }
 }
 
+// impl StepRequest for CreateUserRequest {
+//     fn request(&self) -> reqwest::Request {
+//     }
+
+//     fn deserialize(&self, body: bytes::Bytes) -> serde_json::Result<Entries> {
+//     }
+// }
+
 fn deserialize_user_response(
     username: &Username,
-    body: bytes::Bytes,
+    body: impl AsRef<[u8]>,
 ) -> serde_json::Result<Entries> {
     let user: models::User = serde_json::from_slice(body.as_ref())?;
     let outputs = vec![
-        (
-            Dependency::UserExists(username.clone()),
-            user.id.to_string(), // arbitrary placeholder value
-        ),
         (Dependency::UserUrl(username.clone()), user.url),
         (Dependency::UserEmail(username.clone()), user.email),
         (Dependency::UserGroupsUrl(username.clone()), user.groups),
@@ -132,7 +143,7 @@ pub(crate) struct UserGetAuthToken {
 
 impl PendingStep for UserGetAuthToken {
     fn build(&self, map: &dyn DependencyMap) -> PendingStepResult {
-        map.get(Dependency::UserExists(self.username.clone()))?;
+        debug_assert!(map.get(Dependency::User(self.username.clone())).is_ok());
         if map.contains_key(&Dependency::AuthToken(self.username.clone())) {
             return Ok(None);
         }
@@ -143,7 +154,7 @@ impl PendingStep for UserGetAuthToken {
 pub(crate) struct UserGetAuthTokenStep(UserGetAuthToken);
 
 impl Step for UserGetAuthTokenStep {
-    fn search(&self) -> reqwest::Request {
+    fn request(&self) -> reqwest::Request {
         let url = self.0.url.to_url().join("auth-token/").unwrap();
         let body = models::AuthTokenRequest {
             username: self.0.username.to_string(),
@@ -155,13 +166,13 @@ impl Step for UserGetAuthTokenStep {
             .accept_json()
     }
 
-    fn deserialize(&self, body: bytes::Bytes) -> serde_json::Result<Check> {
-        deserialize_auth_token(&self.0.username, body).map(Check::Exists)
+    fn deserialize(&self, body: bytes::Bytes) -> serde_json::Result<EffectKind> {
+        deserialize_auth_token(&self.0.username, body).map(EffectKind::Unmodified)
     }
 
     fn provides(&self) -> NonEmpty<Dependency> {
         nonempty![
-            Dependency::UserExists(self.0.username.clone()),
+            Dependency::User(self.0.username.clone()),
             Dependency::AuthToken(self.0.username.clone())
         ]
     }
@@ -189,7 +200,7 @@ impl PendingStep for UserGetUrl {
             };
             ok_step(step)
         } else {
-            let step = UserExistsStep(UserExists {
+            let step = UserTryGetAuthTokenStep(UserTryGetAuthToken {
                 username: self.username.clone(),
                 details: Rc::clone(&self.details),
                 url: self.url.clone(),
@@ -209,7 +220,7 @@ pub(crate) struct UserGetUrlStep {
 }
 
 impl Step for UserGetUrlStep {
-    fn search(&self) -> reqwest::Request {
+    fn request(&self) -> reqwest::Request {
         let mut url = self.url.to_url();
         url.set_query(Some("limit=1"));
         Request::new(Method::GET, url)
@@ -217,13 +228,13 @@ impl Step for UserGetUrlStep {
             .accept_json()
     }
 
-    fn deserialize(&self, body: bytes::Bytes) -> serde_json::Result<Check> {
+    fn deserialize(&self, body: bytes::Bytes) -> serde_json::Result<EffectKind> {
         let data: RootResponse = serde_json::from_slice(&body)?;
         let outputs = [(
             Dependency::UserUrl(self.username.clone()),
             data.collection_links.user,
         )];
-        Ok(Check::Exists(outputs.into()))
+        Ok(EffectKind::Unmodified(outputs.into()))
     }
 
     fn create(&self) -> Option<Box<dyn StepRequest>> {
@@ -236,7 +247,7 @@ impl Step for UserGetUrlStep {
 
     fn provides(&self) -> NonEmpty<Dependency> {
         nonempty![
-            Dependency::UserExists(self.username.clone()),
+            Dependency::User(self.username.clone()),
             Dependency::UserUrl(self.username.clone())
         ]
     }
@@ -282,15 +293,15 @@ pub(crate) struct UserGetDetailsStep {
 }
 
 impl Step for UserGetDetailsStep {
-    fn search(&self) -> reqwest::Request {
+    fn request(&self) -> reqwest::Request {
         let url = Url::parse(&self.user_url).unwrap();
         Request::new(Method::GET, url)
             .auth_token(self.auth_token.as_str())
             .accept_json()
     }
 
-    fn deserialize(&self, body: bytes::Bytes) -> serde_json::Result<Check> {
-        deserialize_user_response(&self.username, body).map(Check::Exists)
+    fn deserialize(&self, body: bytes::Bytes) -> serde_json::Result<EffectKind> {
+        deserialize_user_response(&self.username, body).map(EffectKind::Unmodified)
     }
 
     fn create(&self) -> Option<Box<dyn StepRequest>> {
@@ -303,7 +314,7 @@ impl Step for UserGetDetailsStep {
 
     fn provides(&self) -> NonEmpty<Dependency> {
         nonempty![
-            Dependency::UserExists(self.username.clone()),
+            Dependency::User(self.username.clone()),
             Dependency::UserUrl(self.username.clone()),
             Dependency::UserGroupsUrl(self.username.clone()),
             Dependency::UserEmail(self.username.clone()),
@@ -343,13 +354,7 @@ fn deserialize_auth_token(
 ) -> serde_json::Result<Entries> {
     let body: models::AuthToken = serde_json::from_slice(body.as_ref())?;
     let value = format!("Token {}", body.token);
-    let outputs = vec![
-        (
-            Dependency::UserExists(username.clone()),
-            "token".to_string(), // arbitrary placeholder value
-        ),
-        (Dependency::AuthToken(username.clone()), value),
-    ];
+    let outputs = vec![(Dependency::AuthToken(username.clone()), value)];
     Ok(outputs)
 }
 
@@ -367,7 +372,7 @@ pub(crate) struct UserDetailsFinalizeStep {
 }
 
 impl Step for UserDetailsFinalizeStep {
-    fn search(&self) -> reqwest::Request {
+    fn request(&self) -> reqwest::Request {
         let url = Url::parse(&self.user_url).unwrap();
         let body = models::UserRequest {
             username: None,
@@ -382,13 +387,13 @@ impl Step for UserDetailsFinalizeStep {
             .accept_json()
     }
 
-    fn deserialize(&self, body: bytes::Bytes) -> serde_json::Result<Check> {
-        deserialize_user_response(&self.username, body).map(Check::Modified)
+    fn deserialize(&self, body: bytes::Bytes) -> serde_json::Result<EffectKind> {
+        deserialize_user_response(&self.username, body).map(EffectKind::Modified)
     }
 
     fn provides(&self) -> NonEmpty<Dependency> {
         nonempty![
-            Dependency::UserExists(self.username.clone()),
+            Dependency::User(self.username.clone()),
             Dependency::UserEmail(self.username.clone())
         ]
     }

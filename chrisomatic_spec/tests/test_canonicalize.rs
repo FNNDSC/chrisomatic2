@@ -19,7 +19,7 @@ fn test_convert_no_cube() {
             cube: None,
             admin: Some(UserCredentials::basic_auth("chris", "chris1234")),
             email_domain: None,
-            public_cube: None,
+            peer: None,
         },
         ..Default::default()
     };
@@ -36,10 +36,12 @@ fn test_reduce_duplicate_user() {
             ..Default::default()
         },
         user: create_users(["alice", "bobby"]),
+        ..Default::default()
     };
     let manifest2 = GivenManifest {
         global: Default::default(),
         user: create_users(["bobby", "samuel"]),
+        ..Default::default()
     };
     let actual = reduce([manifest1, manifest2]);
     let duplicate = Username::new(CompactString::const_new("bobby"));
@@ -56,10 +58,12 @@ fn test_reduce_multiple_users() {
             ..Default::default()
         },
         user: create_users(["alice", "bobby"]),
+        ..Default::default()
     };
     let manifest2 = GivenManifest {
         global: Default::default(),
         user: create_users(["samuel", "washington"]),
+        ..Default::default()
     };
     let actual: HashSet<_> = reduce([manifest1, manifest2])
         .unwrap()
@@ -70,6 +74,43 @@ fn test_reduce_multiple_users() {
         .into_keys()
         .collect();
     assert_eq!(actual, expected)
+}
+
+#[test]
+fn test_validate_no_plugin_duplicates() {
+    let given = GivenManifest {
+        global: GivenGlobal {
+            cube: Some(CubeUrl::try_new("https://cube.example.org/api/v1/").unwrap()),
+            admin: Some(UserCredentials::basic_auth("chris", "chris1234")),
+            ..Default::default()
+        },
+        plugins: vec![
+            PluginConfig {
+                name: CompactString::const_new("pl-dup"),
+                version: Some(CompactString::const_new("3.2.1")),
+                compute_resources: vec![],
+            },
+            PluginConfig {
+                name: CompactString::const_new("pl-uni"),
+                version: Some(CompactString::const_new("3.2.1")),
+                compute_resources: vec![],
+            },
+            PluginConfig {
+                name: CompactString::const_new("pl-dup"),
+                version: Some(CompactString::const_new("3.2.1")),
+                compute_resources: vec![],
+            },
+            PluginConfig {
+                name: CompactString::const_new("pl-uni"),
+                version: Some(CompactString::const_new("1.2.3")),
+                compute_resources: vec![],
+            },
+        ],
+        ..Default::default()
+    };
+    let actual: Result<Manifest, _> = given.try_into();
+    let expected = ManifestError::DuplicatePlugin(PluginSpec::new("pl-dup", "3.2.1"));
+    assert_eq!(actual, Err(expected))
 }
 
 fn create_users(

@@ -2,13 +2,12 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use crate::dependency_tree::{Dag, DependencyTree, NodeIndex};
-use crate::steps::*;
+use crate::types::Step;
 use chrisomatic_spec::*;
-use chrisomatic_step::PendingStep;
 use petgraph::acyclic::Acyclic;
 use petgraph::data::Build;
 
-pub fn plan(manifest: Manifest) -> DependencyTree<Rc<dyn PendingStep>> {
+pub fn plan(manifest: Manifest) -> DependencyTree<Rc<dyn Step>> {
     let mut tree = TreeBuilder::new();
     let url = manifest.global.cube;
     let users: HashMap<_, _> = manifest
@@ -16,7 +15,28 @@ pub fn plan(manifest: Manifest) -> DependencyTree<Rc<dyn PendingStep>> {
         .into_iter()
         .map(|(username, details)| add_steps_for_user(&mut tree, username, details, url.clone()))
         .collect();
+    let plugins: HashMap<_, _> = manifest
+        .plugins
+        .into_iter()
+        .map(|details| {
+            add_steps_for_plugin(
+                &mut tree,
+                details,
+                url.clone(),
+                manifest.global.peer.clone(),
+            )
+        })
+        .collect();
     tree.into()
+}
+
+fn add_steps_for_plugin(
+    tree: &mut TreeBuilder,
+    details: PluginConfig,
+    url: CubeUrl,
+    peer: Option<CubeUrl>,
+) -> (PluginSpec, NodeIndex) {
+    todo!()
 }
 
 fn add_steps_for_user(
@@ -27,68 +47,66 @@ fn add_steps_for_user(
 ) -> (Username, NodeIndex) {
     let password = details.password.clone();
     let details = Rc::new(details);
-    let exists = tree.add(
-        UserExists {
-            username: username.clone(),
-            details: Rc::clone(&details),
-            url: url.clone(),
-        },
-        vec![],
-    );
-    let auth_token = tree.add(
-        UserGetAuthToken {
-            username: username.clone(),
-            password,
-            url: url.clone(),
-        },
-        vec![exists],
-    );
-    let get_url = tree.add(
-        UserGetUrl {
-            username: username.clone(),
-            details: Rc::clone(&details),
-            url: url.clone(),
-        },
-        vec![auth_token],
-    );
-    let get_details = tree.add(
-        UserGetDetails {
-            url: url.clone(),
-            username: username.clone(),
-            details: Rc::clone(&details),
-        },
-        vec![get_url, auth_token],
-    );
-    tree.add(
-        UserDetailsFinalize {
-            username: username.clone(),
-            details,
-        },
-        vec![get_details, auth_token],
-    );
-    (username, auth_token)
+    todo!()
+    // let exists = tree.add(
+    //     UserTryGetAuthToken {
+    //         username: username.clone(),
+    //         details: Rc::clone(&details),
+    //         url: url.clone(),
+    //     },
+    //     vec![],
+    // );
+    // let auth_token = tree.add(
+    //     UserGetAuthToken {
+    //         username: username.clone(),
+    //         password,
+    //         url: url.clone(),
+    //     },
+    //     vec![exists],
+    // );
+    // let get_url = tree.add(
+    //     UserGetUrl {
+    //         username: username.clone(),
+    //         details: Rc::clone(&details),
+    //         url: url.clone(),
+    //     },
+    //     vec![auth_token],
+    // );
+    // let get_details = tree.add(
+    //     UserGetDetails {
+    //         url: url.clone(),
+    //         username: username.clone(),
+    //         details: Rc::clone(&details),
+    //     },
+    //     vec![get_url, auth_token],
+    // );
+    // tree.add(
+    //     UserDetailsFinalize {
+    //         username: username.clone(),
+    //         details,
+    //     },
+    //     vec![get_details, auth_token],
+    // );
+    // (username, auth_token)
 }
 
-struct TreeBuilder(Dag<Rc<dyn PendingStep>>);
+struct TreeBuilder(Dag<Rc<dyn Step>>);
 
 impl TreeBuilder {
     fn new() -> Self {
         Self(Acyclic::new())
     }
 
-    fn add<T>(&mut self, pending_step: T, needs: Vec<NodeIndex>) -> NodeIndex
-    where
-        T: PendingStep + AsRef<dyn PendingStep> + 'static,
-    {
+    fn add(&mut self, step: impl Step + 'static, needs: Vec<NodeIndex>) -> NodeIndex {
         #[cfg(debug_assertions)]
         {
             // assert that `pending_step`'s dependencies are satisfied by
             // the nodes specified in `needs`
             let provided = self.provides(&needs);
-            let needed = crate::dependency_spy::dependencies_of(&pending_step);
+            let needed = crate::dependency_spy::dependencies_of(&step);
             debug_assert!(provided.is_superset(&needed));
         }
-        let id = self.0.add_node(Rc::new(pending_step));
+        let id = self.0.add_node(Rc::new(step));
         for need in needs {
             self.0.try_add_edge(need, id, ()).unwrap();
         }
@@ -100,16 +118,16 @@ impl TreeBuilder {
     fn provides<'a>(
         &self,
         needs: impl IntoIterator<Item = &'a NodeIndex>,
-    ) -> std::collections::HashSet<chrisomatic_step::Dependency> {
+    ) -> std::collections::HashSet<crate::types::Dependency> {
         needs
             .into_iter()
             .map(|id| self.0.node_weight(*id).unwrap())
-            .flat_map(|parent| crate::dependency_spy::provides_of(parent))
+            .flat_map(|parent| parent.provides())
             .collect()
     }
 }
 
-impl From<TreeBuilder> for DependencyTree<Rc<dyn PendingStep>> {
+impl From<TreeBuilder> for DependencyTree<Rc<dyn Step>> {
     fn from(value: TreeBuilder) -> Self {
         DependencyTree(value.0)
     }
@@ -118,34 +136,32 @@ impl From<TreeBuilder> for DependencyTree<Rc<dyn PendingStep>> {
 #[cfg(test)]
 mod tests {
 
-    use crate::dependency_spy::provides_of;
-
     use super::*;
-    use chrisomatic_step::Dependency;
     use compact_str::CompactString;
     use rstest::*;
 
     #[rstest]
     fn test_add_steps_for_user(user: (Username, UserDetails), cube_url: CubeUrl) {
-        let (username, details) = user;
-        let mut tree = TreeBuilder::new();
-        let (username, token_id) = add_steps_for_user(&mut tree, username, details, cube_url);
-        let pending_step_for_token = tree.0.node_weight(token_id).unwrap();
+        // TODO
+        // let (username, details) = user;
+        // let mut tree = TreeBuilder::new();
+        // let (username, token_id) = add_steps_for_user(&mut tree, username, details, cube_url);
+        // let pending_step_for_token = tree.0.node_weight(token_id).unwrap();
 
-        let provides = provides_of(pending_step_for_token);
-        assert!(provides.contains(&Dependency::AuthToken(username.clone())));
+        // let provides = provides_of(pending_step_for_token);
+        // assert!(provides.contains(&Dependency::AuthToken(username.clone())));
 
-        let start = DependencyTree::from(tree).start();
-        let start_provides: std::collections::HashSet<_> = start
-            .into_iter()
-            .map(|(_id, pending_step)| pending_step)
-            .flat_map(provides_of)
-            .collect();
-        assert!(
-            start_provides.contains(&Dependency::UserExists(username)),
-            "Starting steps for user must provide a Dependency::UserExists, but does not, instead: {:?}",
-            start_provides
-        )
+        // let start = DependencyTree::from(tree).start();
+        // let start_provides: std::collections::HashSet<_> = start
+        //     .into_iter()
+        //     .map(|(_id, pending_step)| pending_step)
+        //     .flat_map(provides_of)
+        //     .collect();
+        // assert!(
+        //     start_provides.contains(&Dependency::User(username)),
+        //     "Starting steps for user must provide a Dependency::UserExists, but does not, instead: {:?}",
+        //     start_provides
+        // )
     }
 
     #[fixture]

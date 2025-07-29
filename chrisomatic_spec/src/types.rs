@@ -56,6 +56,7 @@ impl From<&'static str> for Username {
 ))]
 pub struct Group(CompactString);
 
+/// Name of a _ChRIS_ compute resource.
 #[nutype(derive(
     Display,
     Debug,
@@ -71,4 +72,4 @@ pub struct Group(CompactString);
     From,
     Into,
 ))]
-pub struct EmailDomain(CompactString);
+pub struct ComputeResourceName(CompactString);

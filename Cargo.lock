@@ -233,7 +233,6 @@ dependencies = [
  "camino",
  "chrisomatic_core",
  "chrisomatic_spec",
- "chrisomatic_step",
  "clap",
  "color-eyre",
  "fs-err",
@@ -257,11 +256,10 @@ name = "chrisomatic_core"
 version = "0.1.0"
 dependencies = [
  "async-stream",
+ "base64 0.22.1",
  "bytes",
  "chris-oag",
  "chrisomatic_spec",
- "chrisomatic_step",
- "chrisomatic_step_macro",
  "compact_str",
  "futures-concurrency",
  "futures-lite",
@@ -287,28 +285,9 @@ dependencies = [
  "reqwest",
  "rstest",
  "serde",
+ "serde_json",
  "thiserror",
  "toml",
-]
-
-[[package]]
-name = "chrisomatic_step"
-version = "0.1.0"
-dependencies = [
- "bytes",
- "chrisomatic_spec",
- "nonempty",
- "reqwest",
- "serde_json",
-]
-
-[[package]]
-name = "chrisomatic_step_macro"
-version = "0.1.0"
-dependencies = [
- "chrisomatic_step",
- "quote",
- "syn",
 ]
 
 [[package]]
@@ -1427,6 +1406,9 @@ name = "nonempty"
 version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9737e026353e5cd0736f98eddae28665118eb6f6600902a7f50db585621fecb6"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "nu-ansi-term"

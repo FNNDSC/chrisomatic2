@@ -2,5 +2,5 @@
 
 resolver = "3"
 
-members = [ "chrisomatic_cli", "chrisomatic_core", "chrisomatic_spec", "chrisomatic_step", "chrisomatic_step_macro", "chrisomatic_web"]
+members = [ "chrisomatic_cli", "chrisomatic_core", "chrisomatic_spec", "chrisomatic_web"]
 

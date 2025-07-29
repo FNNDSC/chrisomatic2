@@ -1,26 +1,25 @@
 use std::rc::Rc;
 
-use chrisomatic_step::{Check, Dependency, Entries, StatusCheck, Step};
+use reqwest::Request;
 
-/// Execute a [Step].
-///
-/// 1. [Step::search] is called to search for the resource's prior existence in the API.
-///    (It can also do the resource creation/modification right away if that is possible.)
-/// 2. [Step::deserialize] decides what to do next.
-/// 3. If the resource needs to be created, call [Step::create]. Or, if the resource
-///    needs to be modified, calll [Step::modify].
-pub(crate) async fn exec_step(client: &reqwest::Client, step: Rc<dyn Step>) -> (Outcome, Entries) {
-    let target = step.provides().head;
-    match exec_step_impl(client, step).await {
-        Ok((effect, outputs)) => {
+use crate::types::*;
+
+/// Execute the request of a [Step].
+pub(crate) async fn exec_step(
+    client: &reqwest::Client,
+    step: Rc<dyn Step>,
+    request: Request,
+) -> (Outcome, Entries) {
+    let target = step.affects();
+    let effect = step.effect().into();
+    match exec_step_impl(client, step, request).await {
+        Ok(outputs) => {
             let outcome = Outcome { target, effect };
             (outcome, outputs)
         }
         Err(e) => {
-            let outcome = Outcome {
-                target,
-                effect: StepEffect::Error(e),
-            };
+            let effect = StepEffect::Error(e);
+            let outcome = Outcome { target, effect };
             (outcome, vec![])
         }
     }
@@ -29,94 +28,20 @@ pub(crate) async fn exec_step(client: &reqwest::Client, step: Rc<dyn Step>) -> (
 async fn exec_step_impl(
     client: &reqwest::Client,
     step: Rc<dyn Step>,
-) -> Result<(StepEffect, Entries), StepError> {
-    let req = step.search();
-    let method = req.method().clone();
-    let res = client.execute(step.search()).await?;
-    let url = res.url().clone();
-    let check = match step.check_status(res.status()) {
-        StatusCheck::Exists => step.deserialize(res.bytes().await?)?,
-        StatusCheck::DoesNotExist => Check::DoesNotExist,
-        StatusCheck::Error => {
-            return Err(StepError::Status {
-                status: res.status(),
-                method,
-                url: res.url().clone(),
-            });
-        }
-    };
-    match check {
-        Check::Exists(data) => Ok((StepEffect::Unmodified, data)),
-        Check::Modified(data) => Ok((StepEffect::Modified, data)),
-        Check::DoesNotExist => {
-            if let Some(req) = step.create() {
-                let res = client.execute(req.request()).await?.error_for_status()?;
-                let data = req.deserialize(res.bytes().await?)?;
-                Ok((StepEffect::Created, data))
-            } else {
-                Err(StepError::Uncreatable(url))
-            }
-        }
-        Check::NeedsModification => {
-            if let Some(req) = step.modify() {
-                let res = client.execute(req.request()).await?.error_for_status()?;
-                let data = req.deserialize(res.bytes().await?)?;
-                Ok((StepEffect::Modified, data))
-            } else {
-                Err(StepError::Unmodifiable(url))
-            }
-        }
+    request: Request,
+) -> Result<Entries, StepError> {
+    let method = request.method().clone();
+    let res = client.execute(request).await?;
+    let status = res.status();
+    if !step.check_status(status) {
+        let url = res.url().clone();
+        return Err(StepError::Status {
+            status,
+            method,
+            url,
+        });
     }
-}
-
-#[derive(thiserror::Error, Debug)]
-pub enum StepError {
-    #[error("Will not try to create resource which should have already been created: {0}")]
-    Uncreatable(reqwest::Url),
-    #[error("Resource cannot be modified: {0}")]
-    Unmodifiable(reqwest::Url),
-    #[error(transparent)]
-    Request(#[from] reqwest::Error),
-    #[error("HTTP status code {status} from {method} {url}")]
-    Status {
-        status: reqwest::StatusCode,
-        method: reqwest::Method,
-        url: reqwest::Url,
-    },
-    #[error(transparent)]
-    Deserialize(#[from] serde_json::Error),
-}
-
-/// The effect a step has had on the API state.
-#[derive(Debug)]
-pub enum StepEffect {
-    /// A resource was created.
-    Created,
-    /// A resource was found.
-    Unmodified,
-    /// A resource was modified.
-    Modified,
-    /// The step was not performed because of an unfulfilled dependency.
-    Unfulfilled(Dependency),
-    /// The step produced an error.
-    Error(StepError),
-}
-
-/// Outcome of running a [Step].
-#[derive(Debug)]
-pub struct Outcome {
-    /// Affected API resource.
-    pub target: Dependency,
-    /// Step effect.
-    pub effect: StepEffect,
-}
-
-impl Outcome {
-    /// Returns `true` if the effect is OK.
-    pub fn ok(&self) -> bool {
-        matches!(
-            &self.effect,
-            StepEffect::Created | StepEffect::Unmodified | StepEffect::Modified
-        )
-    }
+    let body = res.bytes().await?;
+    let outputs = step.deserialize(body)?;
+    Ok(outputs)
 }

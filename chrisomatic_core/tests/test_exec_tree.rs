@@ -1,11 +1,9 @@
 use std::rc::Rc;
 
-use chrisomatic_core::{DependencyTree, Outcome, exec_tree};
+use chrisomatic_core::{DependencyTree, exec_tree, types::*};
 use chrisomatic_spec::Username;
-use chrisomatic_step::*;
 use compact_str::ToCompactString;
 use futures_lite::StreamExt;
-use nonempty::{NonEmpty, nonempty};
 use petgraph::{acyclic::Acyclic, data::Build, prelude::StableDiGraph};
 use reqwest::{Method, Request, Url};
 use warp::Filter;
@@ -19,7 +17,7 @@ async fn test_exec_tree() {
     let port = addr.port();
     let server_task = tokio::spawn(test_server(addr));
 
-    let mut dag: Acyclic<StableDiGraph<Rc<dyn PendingStep>, ()>> = Acyclic::new();
+    let mut dag: Acyclic<StableDiGraph<Rc<dyn Step>, ()>> = Acyclic::new();
     /*
        a   d
        |   |
@@ -29,14 +27,14 @@ async fn test_exec_tree() {
       /
      v
     */
-    let a = dag.add_node(Rc::new(TestPendingStep { data: 'a', port }));
-    let b = dag.add_node(Rc::new(TestPendingStep { data: 'b', port }));
-    let c = dag.add_node(Rc::new(TestPendingStep { data: 'c', port }));
-    let d = dag.add_node(Rc::new(TestPendingStep { data: 'd', port }));
-    let e = dag.add_node(Rc::new(TestPendingStep { data: 'e', port }));
-    let f = dag.add_node(Rc::new(TestPendingStep { data: 'f', port }));
-    let u = dag.add_node(Rc::new(AlwaysFulfilledPendingStep));
-    let v = dag.add_node(Rc::new(AlwaysFulfilledPendingStep));
+    let a = dag.add_node(Rc::new(TestStep { data: 'a', port }));
+    let b = dag.add_node(Rc::new(TestStep { data: 'b', port }));
+    let c = dag.add_node(Rc::new(TestStep { data: 'c', port }));
+    let d = dag.add_node(Rc::new(TestStep { data: 'd', port }));
+    let e = dag.add_node(Rc::new(TestStep { data: 'e', port }));
+    let f = dag.add_node(Rc::new(TestStep { data: 'f', port }));
+    let u = dag.add_node(Rc::new(NeverStep('u')));
+    let v = dag.add_node(Rc::new(NeverStep('v')));
     dag.try_add_edge(a, b, ()).unwrap();
     dag.try_add_edge(b, c, ()).unwrap();
     dag.try_add_edge(d, e, ()).unwrap();
@@ -53,9 +51,7 @@ async fn test_exec_tree() {
             .iter()
             .map(|outcome| &outcome.target)
             .enumerate()
-            .find(|(_, target)| {
-                *target == &Dependency::UserExists(Username::new(x.to_compact_string()))
-            })
+            .find(|(_, target)| *target == &Resource::User(Username::new(x.to_compact_string())))
             .map(|(i, _)| i)
             .unwrap()
     };
@@ -87,41 +83,41 @@ async fn test_exec_tree() {
 }
 
 #[derive(Copy, Clone, Debug)]
-struct TestPendingStep {
+struct TestStep {
     data: char,
     port: u16,
 }
 
 #[derive(Copy, Clone, Debug)]
-struct AlwaysFulfilledPendingStep;
+struct NeverStep(char);
 
-impl PendingStep for AlwaysFulfilledPendingStep {
-    fn build(&self, map: &dyn DependencyMap) -> PendingStepResult {
-        if map.contains_key(&Dependency::UserExists("a".into())) {
+impl Step for NeverStep {
+    fn request(&self, map: &dyn DependencyMap) -> Result<Option<reqwest::Request>, Dependency> {
+        if map.contains_key(&Dependency::UserUrl("a".into())) {
             Ok(None)
         } else {
-            Ok(Some(Rc::new(ShouldNeverRunStep)))
+            panic!("Bad test")
         }
     }
+
+    fn affects(&self) -> Resource {
+        Resource::User(self.0.to_compact_string().into())
+    }
+
+    fn effect(&self) -> EffectKind {
+        EffectKind::Created
+    }
+
+    fn deserialize(&self, _: bytes::Bytes) -> serde_json::Result<Entries> {
+        panic!("bad test")
+    }
+
+    fn provides(&self) -> Vec<Dependency> {
+        vec![]
+    }
 }
 
-struct ShouldNeverRunStep;
-
-impl Step for ShouldNeverRunStep {
-    fn search(&self) -> reqwest::Request {
-        unimplemented!()
-    }
-
-    fn deserialize(&self, _: bytes::Bytes) -> serde_json::Result<Check> {
-        unimplemented!()
-    }
-
-    fn provides(&self) -> NonEmpty<Dependency> {
-        nonempty![Dependency::UserExists("a".into())]
-    }
-}
-
-impl TestPendingStep {
+impl TestStep {
     fn dummy_username(&self) -> Username {
         Username::new(self.data.to_compact_string())
     }
@@ -131,27 +127,27 @@ impl TestPendingStep {
     }
 }
 
-impl PendingStep for TestPendingStep {
-    fn build(&self, _: &dyn DependencyMap) -> PendingStepResult {
-        Ok(Some(Rc::new(TestStep(self.clone()))))
-    }
-}
-
-struct TestStep(TestPendingStep);
-
 impl Step for TestStep {
-    fn search(&self) -> reqwest::Request {
-        Request::new(Method::GET, self.0.url())
+    fn request(&self, _: &dyn DependencyMap) -> Result<Option<Request>, Dependency> {
+        let req = Request::new(Method::GET, self.url());
+        Ok(Some(req))
     }
 
-    fn deserialize(&self, body: bytes::Bytes) -> serde_json::Result<Check> {
+    fn affects(&self) -> Resource {
+        Resource::User(self.dummy_username())
+    }
+
+    fn effect(&self) -> EffectKind {
+        EffectKind::Unmodified
+    }
+
+    fn deserialize(&self, body: bytes::Bytes) -> serde_json::Result<Entries> {
         let data = String::from_utf8(body.into()).unwrap();
-        let out = vec![(Dependency::UserExists(self.0.dummy_username()), data)];
-        Ok(Check::Exists(out))
+        Ok(vec![(Dependency::UserUrl(self.dummy_username()), data)])
     }
 
-    fn provides(&self) -> NonEmpty<Dependency> {
-        nonempty![Dependency::UserExists(self.0.dummy_username())]
+    fn provides(&self) -> Vec<Dependency> {
+        vec![Dependency::UserUrl(self.dummy_username())]
     }
 }
 

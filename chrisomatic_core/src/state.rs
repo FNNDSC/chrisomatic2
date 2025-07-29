@@ -1,6 +1,6 @@
 use std::{collections::HashMap, rc::Rc};
 
-use chrisomatic_step::{Dependency, DependencyMap, Entry};
+use crate::types::{Dependency, DependencyMap, Entry};
 
 /// Map of values which steps may depend on.
 ///

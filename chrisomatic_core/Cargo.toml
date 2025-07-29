@@ -4,20 +4,19 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-chrisomatic_step = { path = "../chrisomatic_step"}
 chrisomatic_spec = { path = "../chrisomatic_spec"}
-chrisomatic_step_macro = { path = "../chrisomatic_step_macro" }
 async-stream = "0.3.6"
 bytes = "1.10.1"
 chris-oag = { git = "https://github.com/fnndsc/openapi-clients", version = "0.0.1" }
 futures-concurrency = "7.6.3"
 futures-lite = "2.6.0"
-nonempty = "0.12.0"
+nonempty = { version = "0.12.0", features = ["serialize"] }
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.141"
 petgraph = "0.8.2"
 reqwest = { version = "0.12.22", default-features = false, features = ["json", "rustls-tls"] }
 thiserror = "2.0.12"
+base64 = "0.22.1"
 
 [dev-dependencies]
 compact_str = "0.9.0"
