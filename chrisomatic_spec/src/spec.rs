@@ -5,13 +5,16 @@ use serde::{Deserialize, Serialize};
 
 use crate::types::*;
 
-/// User-supplied input chrisomatic manifest. Similar to [Manifest], but with
-/// many fields being [Option] (for user convenience).
+/// User-supplied input "manifest" for the _chrisomatic_ tool. A "manifest"
+/// specifies desired state of the _ChRIS_ backend, e.g. what users, plugins,
+/// feeds, etc. should exist.
 ///
-/// ## Developer Hints
+/// ### See Also
 ///
-/// Combine multiple [GivenManifest] into one with [crate::reduce],
-/// then convert to [Manifest] with [TryFrom].
+/// - [crate::reduce] combines multiple `GivenManifest` into one.
+/// - [Manifest] is the validated data of `GivenManifest`, obtained by the
+///   [TryFrom] trait. The difference between `GivenManifest` and `Manifest`
+///   is `GivenManifest` has many [Option] fields for user convenience.
 #[derive(Default, Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct GivenManifest {
     /// Global configuration options.

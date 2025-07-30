@@ -1,12 +1,11 @@
+use crate::types::*;
 use crate::{extra_models::RootResponse, request_builder::RequestBuilder};
 use chris_oag::models;
 use chrisomatic_spec::*;
-use chrisomatic_step::*;
-use chrisomatic_step_macro::AsRefPendingStep;
 use reqwest::{Method, Request, StatusCode, Url};
 use std::rc::Rc;
 
-/// A [PendingStep] for [UserGetAuthTokenStep].
+/// A [Step] to try getting an auth token for a user who may or may not exist.
 #[derive(Debug, Clone, AsRefPendingStep)]
 pub(crate) struct UserTryGetAuthToken {
     pub(crate) username: Username,
@@ -14,26 +13,13 @@ pub(crate) struct UserTryGetAuthToken {
     pub(crate) url: CubeUrl,
 }
 
-impl PendingStep for UserTryGetAuthToken {
-    fn build(&self, map: &dyn DependencyMap) -> PendingStepResult {
+impl Step for UserTryGetAuthToken {
+    fn request(&self) -> reqwest::Request {
         debug_assert!(
             !map.contains_key(&Dependency::AuthToken(self.username.clone())),
             "Duplicate step for \"{}\"",
             &self.username
         );
-        ok_step(UserTryGetAuthTokenStep(self.clone()))
-    }
-
-    fn affects(&self) -> Resource {
-        Resource::User(self.username.clone())
-    }
-}
-
-/// A [Step] to get an auth token for a user who may or may not exist.
-pub(crate) struct UserTryGetAuthTokenStep(UserTryGetAuthToken);
-
-impl Step for UserTryGetAuthTokenStep {
-    fn request(&self) -> reqwest::Request {
         let url = self.0.url.to_url().join("auth-token/").unwrap();
         let body = models::AuthTokenRequest {
             username: self.0.username.to_string(),
@@ -58,31 +44,23 @@ impl Step for UserTryGetAuthTokenStep {
     fn provides(&self) -> Vec<Dependency> {
         vec![Dependency::User(self.0.username.clone())]
     }
+
+    fn affects(&self) -> Resource {
+        Resource::User(self.0.username.clone())
+    }
+
+    fn effect(&self) -> StepEffect {
+        StepEffect::Unmodified
+    }
 }
 
+/// A [Step] to create a user.
 #[derive(Clone, Debug)]
-pub(crate) struct UserCreate {
+pub(crate) struct UserCreateStep {
     url: CubeUrl,
     username: Username,
     details: Rc<UserDetails>,
 }
-
-impl PendingStep for UserCreate {
-    fn build(&self, map: &dyn DependencyMap) -> PendingStepResult {
-        if map.contains_key(&Dependency::AuthToken(self.username.clone()))
-            || map.contains_key(&Dependency::UserUrl(self.username.clone()))
-        {
-            return Ok(None);
-        }
-        ok_step(UserCreateStep(self.clone()))
-    }
-
-    fn affects(&self) -> Resource {
-        todo!()
-    }
-}
-
-pub(crate) struct UserCreateStep(UserCreate);
 
 impl Step for UserCreateStep {
     fn request(&self) -> reqwest::Request {

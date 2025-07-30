@@ -1,4 +1,4 @@
-//! Type definitions of the _chrisomatic_ specification.
+//! _chrisomatic_ manifest schema definition. See [GivenManifest].
 mod canonicalize;
 mod plugin_spec;
 mod share_target;

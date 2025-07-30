@@ -153,6 +153,7 @@ pub trait Step {
     fn deserialize(&self, body: bytes::Bytes) -> serde_json::Result<Entries>;
 
     /// Indicate what keys which are guaranteed to be contained in the [Ok]
-    /// return of [Step::deserialize].
+    /// return of [Step::deserialize]. Mostly used by [debug_assert] statements
+    /// to ensure that the dependency tree is correct.
     fn provides(&self) -> Vec<Dependency>;
 }

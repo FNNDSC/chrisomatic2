@@ -1,3 +1,5 @@
+//! _chrisomatic_ core functionality.
+
 #[cfg(debug_assertions)]
 mod dependency_spy;
 mod dependency_tree;
@@ -8,7 +10,7 @@ mod fully_exec_tree;
 mod plan;
 mod request_builder;
 mod state;
-mod step;
+mod steps;
 pub mod types;
 
 pub use dependency_tree::DependencyTree;
