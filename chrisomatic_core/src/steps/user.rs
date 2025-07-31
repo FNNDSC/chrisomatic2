@@ -6,7 +6,7 @@ use reqwest::{Method, Request, StatusCode, Url};
 use std::rc::Rc;
 
 /// A [Step] to try getting an auth token for a user who may or may not exist.
-#[derive(Debug, Clone, AsRefPendingStep)]
+#[derive(Debug, Clone)]
 pub(crate) struct UserTryGetAuthToken {
     pub(crate) username: Username,
     pub(crate) details: Rc<UserDetails>,
@@ -14,21 +14,22 @@ pub(crate) struct UserTryGetAuthToken {
 }
 
 impl Step for UserTryGetAuthToken {
-    fn request(&self) -> reqwest::Request {
+    fn request(&self, map: &dyn DependencyMap) -> Result<Option<Request>, Dependency> {
         debug_assert!(
             !map.contains_key(&Dependency::AuthToken(self.username.clone())),
             "Duplicate step for \"{}\"",
             &self.username
         );
-        let url = self.0.url.to_url().join("auth-token/").unwrap();
+        let url = self.url.to_url().join("auth-token/").unwrap();
         let body = models::AuthTokenRequest {
-            username: self.0.username.to_string(),
-            password: self.0.details.password.to_string(),
+            username: self.username.to_string(),
+            password: self.details.password.to_string(),
         };
-        Request::new(Method::POST, url)
+        let req = Request::new(Method::POST, url)
             .json(&body)
             .unwrap()
-            .accept_json()
+            .accept_json();
+        Ok(Some(req))
     }
 
     fn check_status(&self, status: reqwest::StatusCode) -> bool {
@@ -37,16 +38,16 @@ impl Step for UserTryGetAuthToken {
         status == StatusCode::BAD_REQUEST || status.is_success()
     }
 
-    fn deserialize(&self, body: bytes::Bytes) -> serde_json::Result<(EffectKind, Entries)> {
-        deserialize_auth_token(&self.0.username, body).map(|e| (EffectKind::Unmodified, e))
+    fn deserialize(&self, body: bytes::Bytes) -> serde_json::Result<Entries> {
+        deserialize_auth_token(&self.username, body)
     }
 
     fn provides(&self) -> Vec<Dependency> {
-        vec![Dependency::User(self.0.username.clone())]
+        vec![Dependency::AuthToken(self.username.clone())]
     }
 
     fn affects(&self) -> Resource {
-        Resource::User(self.0.username.clone())
+        Resource::User(self.username.clone())
     }
 
     fn effect(&self) -> StepEffect {
@@ -63,46 +64,49 @@ pub(crate) struct UserCreateStep {
 }
 
 impl Step for UserCreateStep {
-    fn request(&self) -> reqwest::Request {
-        let url = self.0.url.to_url().join("users/").unwrap();
+    fn request(&self, map: &dyn DependencyMap) -> Result<Option<reqwest::Request>, Dependency> {
+        let url = self.url.to_url().join("users/").unwrap();
         let body = models::UserRequest {
-            username: Some(self.0.username.to_string()),
-            email: self.0.details.email.to_string(),
-            password: self.0.details.password.to_string(),
+            username: Some(self.username.to_string()),
+            email: self.details.email.to_string(),
+            password: self.details.password.to_string(),
             is_staff: None, // very bad bad bad bad bad
         };
-        Request::new(Method::POST, url)
+        let req = Request::new(Method::POST, url)
             .json(&body)
             .unwrap()
-            .accept_json()
+            .accept_json();
+        Ok(Some(req))
     }
 
-    fn deserialize(&self, body: bytes::Bytes) -> serde_json::Result<(EffectKind, Entries)> {
-        deserialize_user_response(&self.username, body).map(|e| (EffectKind::Created, e))
+    fn deserialize(&self, body: bytes::Bytes) -> serde_json::Result<Entries> {
+        deserialize_user_response(body)
     }
 
     fn provides(&self) -> Vec<Dependency> {
         vec![
-            (Dependency::UserUrl(self.0.username.clone())),
-            (Dependency::UserEmail(self.0.username.clone())),
-            (Dependency::UserGroupsUrl(self.0.username.clone())),
+            (Dependency::UserUrl(self.username.clone())),
+            (Dependency::UserEmail(self.username.clone())),
+            (Dependency::UserGroupsUrl(self.username.clone())),
         ]
+    }
+
+    fn affects(&self) -> Resource {
+        Resource::User(self.username.clone())
+    }
+
+    fn effect(&self) -> StepEffect {
+        StepEffect::Created
     }
 }
 
-// impl StepRequest for CreateUserRequest {
-//     fn request(&self) -> reqwest::Request {
-//     }
-
-//     fn deserialize(&self, body: bytes::Bytes) -> serde_json::Result<Entries> {
-//     }
-// }
-
-fn deserialize_user_response(
-    username: &Username,
-    body: impl AsRef<[u8]>,
-) -> serde_json::Result<Entries> {
+fn deserialize_user_response(body: impl AsRef<[u8]>) -> serde_json::Result<Entries> {
     let user: models::User = serde_json::from_slice(body.as_ref())?;
+    let username = user
+        .username
+        .map(Username::from)
+        // https://github.com/FNNDSC/ChRIS_ultron_backEnd/issues/645
+        .expect("User response does not contain username");
     let outputs = vec![
         (Dependency::UserUrl(username.clone()), user.url),
         (Dependency::UserEmail(username.clone()), user.email),
@@ -112,187 +116,127 @@ fn deserialize_user_response(
 }
 
 /// A [PendingStep] to get a user's authorization token. See [UserGetAuthTokenStep].
-#[derive(Debug, Clone, AsRefPendingStep)]
+#[derive(Debug, Clone)]
 pub(crate) struct UserGetAuthToken {
     pub(crate) username: Username,
     pub(crate) password: String,
     pub(crate) url: CubeUrl,
 }
 
-impl PendingStep for UserGetAuthToken {
-    fn build(&self, map: &dyn DependencyMap) -> PendingStepResult {
-        debug_assert!(map.get(Dependency::User(self.username.clone())).is_ok());
+impl Step for UserGetAuthToken {
+    fn request(&self, map: &dyn DependencyMap) -> Result<Option<reqwest::Request>, Dependency> {
         if map.contains_key(&Dependency::AuthToken(self.username.clone())) {
             return Ok(None);
         }
-        ok_step(UserGetAuthTokenStep(self.clone()))
-    }
-}
-
-pub(crate) struct UserGetAuthTokenStep(UserGetAuthToken);
-
-impl Step for UserGetAuthTokenStep {
-    fn request(&self) -> reqwest::Request {
-        let url = self.0.url.to_url().join("auth-token/").unwrap();
+        let url = self.url.to_url().join("auth-token/").unwrap();
         let body = models::AuthTokenRequest {
-            username: self.0.username.to_string(),
-            password: self.0.password.to_string(),
+            username: self.username.to_string(),
+            password: self.password.to_string(),
         };
-        Request::new(Method::POST, url)
+        let req = Request::new(Method::POST, url)
             .json(&body)
             .unwrap()
-            .accept_json()
+            .accept_json();
+        Ok(Some(req))
     }
 
-    fn deserialize(&self, body: bytes::Bytes) -> serde_json::Result<EffectKind> {
-        deserialize_auth_token(&self.0.username, body).map(EffectKind::Unmodified)
+    fn deserialize(&self, body: bytes::Bytes) -> serde_json::Result<Entries> {
+        deserialize_auth_token(&self.username, body)
     }
 
-    fn provides(&self) -> NonEmpty<Dependency> {
-        nonempty![
-            Dependency::User(self.0.username.clone()),
-            Dependency::AuthToken(self.0.username.clone())
-        ]
+    fn provides(&self) -> Vec<Dependency> {
+        vec![Dependency::AuthToken(self.username.clone())]
+    }
+
+    fn affects(&self) -> Resource {
+        Resource::User(self.username.clone())
+    }
+
+    fn effect(&self) -> StepEffect {
+        StepEffect::Unmodified
     }
 }
 
-/// A [PendingStep] to make sure that the [DependencyMap] contains [Dependency::UserUrl].
-/// See [UserGetUrlStep].
-#[derive(Clone, Debug, AsRefPendingStep)]
+#[derive(Clone, Debug)]
 pub(crate) struct UserGetUrl {
     pub(crate) username: Username,
     pub(crate) details: Rc<UserDetails>,
     pub(crate) url: CubeUrl,
 }
 
-impl PendingStep for UserGetUrl {
-    fn build(&self, map: &dyn DependencyMap) -> PendingStepResult {
+impl Step for UserGetUrl {
+    fn request(&self, map: &dyn DependencyMap) -> Result<Option<reqwest::Request>, Dependency> {
         if map.contains_key(&Dependency::UserUrl(self.username.clone())) {
-            Ok(None)
-        } else if let Ok(auth_token) = map.get(Dependency::AuthToken(self.username.clone())) {
-            let step = UserGetUrlStep {
-                url: self.url.clone(),
-                auth_token,
-                username: self.username.clone(),
-                details: Rc::clone(&self.details),
-            };
-            ok_step(step)
-        } else {
-            let step = UserTryGetAuthTokenStep(UserTryGetAuthToken {
-                username: self.username.clone(),
-                details: Rc::clone(&self.details),
-                url: self.url.clone(),
-            });
-            ok_step(step)
+            return Ok(None);
         }
-    }
-}
-
-/// A [Step] to make sure the [DependencyMap] contains a [Dependency::UserUrl] for the [Username].
-/// The user will be created if necessary.
-pub(crate) struct UserGetUrlStep {
-    url: CubeUrl,
-    username: Username,
-    details: Rc<UserDetails>,
-    auth_token: Rc<String>,
-}
-
-impl Step for UserGetUrlStep {
-    fn request(&self) -> reqwest::Request {
+        let auth_token = map.get(Dependency::AuthToken(self.username.clone()))?;
         let mut url = self.url.to_url();
         url.set_query(Some("limit=1"));
-        Request::new(Method::GET, url)
-            .auth_token(self.auth_token.as_str())
-            .accept_json()
+        let req = Request::new(Method::GET, url)
+            .auth_token(auth_token.as_str())
+            .accept_json();
+        Ok(Some(req))
     }
 
-    fn deserialize(&self, body: bytes::Bytes) -> serde_json::Result<EffectKind> {
+    fn deserialize(&self, body: bytes::Bytes) -> serde_json::Result<Entries> {
         let data: RootResponse = serde_json::from_slice(&body)?;
-        let outputs = [(
+        Ok(vec![(
             Dependency::UserUrl(self.username.clone()),
             data.collection_links.user,
-        )];
-        Ok(EffectKind::Unmodified(outputs.into()))
+        )])
     }
 
-    fn create(&self) -> Option<Box<dyn StepRequest>> {
-        Some(Box::new(CreateUserRequest {
-            url: self.url.clone(),
-            username: self.username.clone(),
-            details: Rc::clone(&self.details),
-        }))
+    fn provides(&self) -> Vec<Dependency> {
+        vec![Dependency::UserUrl(self.username.clone())]
     }
 
-    fn provides(&self) -> NonEmpty<Dependency> {
-        nonempty![
-            Dependency::User(self.username.clone()),
-            Dependency::UserUrl(self.username.clone())
-        ]
+    fn affects(&self) -> Resource {
+        Resource::User(self.username.clone())
+    }
+
+    fn effect(&self) -> StepEffect {
+        StepEffect::Unmodified
     }
 }
 
-/// A [PendingStep] to make sure that [DependencyMap] contains details of a user. See [UserGetDetailsStep].
-#[derive(Clone, Debug, AsRefPendingStep)]
+#[derive(Clone, Debug)]
 pub(crate) struct UserGetDetails {
     pub(crate) url: CubeUrl,
     pub(crate) username: Username,
     pub(crate) details: Rc<UserDetails>,
 }
 
-impl PendingStep for UserGetDetails {
-    fn build(&self, map: &dyn DependencyMap) -> PendingStepResult {
+impl Step for UserGetDetails {
+    fn request(&self, map: &dyn DependencyMap) -> Result<Option<reqwest::Request>, Dependency> {
         let user_url = map.get(Dependency::UserUrl(self.username.clone()));
         if user_url.is_ok()
             && map.contains_key(&Dependency::UserGroupsUrl(self.username.clone()))
             && map.contains_key(&Dependency::UserEmail(self.username.clone()))
         {
-            Ok(None)
-        } else {
-            ok_step(UserGetDetailsStep {
-                url: self.url.clone(),
-                username: self.username.clone(),
-                details: Rc::clone(&self.details),
-                user_url: user_url?,
-                auth_token: map.get(Dependency::AuthToken(self.username.clone()))?,
-            })
+            return Ok(None);
         }
-    }
-}
-
-/// A [PendingStep] to make sure that [DependencyMap] contains the following keys for the [Username]:
-/// [Dependency::UserUrl], [Dependency::UserGroupsUrl], [Dependency::UserEmail].
-/// The user will be created if necessary.
-pub(crate) struct UserGetDetailsStep {
-    url: CubeUrl,
-    username: Username,
-    details: Rc<UserDetails>,
-    user_url: Rc<String>,
-    auth_token: Rc<String>,
-}
-
-impl Step for UserGetDetailsStep {
-    fn request(&self) -> reqwest::Request {
-        let url = Url::parse(&self.user_url).unwrap();
-        Request::new(Method::GET, url)
-            .auth_token(self.auth_token.as_str())
-            .accept_json()
+        let auth_token = map.get(Dependency::AuthToken(self.username.clone()))?;
+        let url = Url::parse(user_url?.as_str()).unwrap();
+        let req = Request::new(Method::GET, url)
+            .auth_token(auth_token.as_str())
+            .accept_json();
+        Ok(Some(req))
     }
 
-    fn deserialize(&self, body: bytes::Bytes) -> serde_json::Result<EffectKind> {
-        deserialize_user_response(&self.username, body).map(EffectKind::Unmodified)
+    fn affects(&self) -> Resource {
+        Resource::User(self.username.clone())
     }
 
-    fn create(&self) -> Option<Box<dyn StepRequest>> {
-        Some(Box::new(CreateUserRequest {
-            url: self.url.clone(),
-            username: self.username.clone(),
-            details: Rc::clone(&self.details),
-        }))
+    fn effect(&self) -> StepEffect {
+        StepEffect::Unmodified
     }
 
-    fn provides(&self) -> NonEmpty<Dependency> {
-        nonempty![
-            Dependency::User(self.username.clone()),
+    fn deserialize(&self, body: bytes::Bytes) -> serde_json::Result<Entries> {
+        deserialize_user_response(body)
+    }
+
+    fn provides(&self) -> Vec<Dependency> {
+        vec![
             Dependency::UserUrl(self.username.clone()),
             Dependency::UserGroupsUrl(self.username.clone()),
             Dependency::UserEmail(self.username.clone()),
@@ -300,29 +244,53 @@ impl Step for UserGetDetailsStep {
     }
 }
 
-/// A [PendingStep] to sync the user's details on the backend with what is specified.
-/// See [UserDetailsFinalizeStep].
-#[derive(Clone, Debug, AsRefPendingStep)]
-pub(crate) struct UserDetailsFinalize {
+#[derive(Clone, Debug)]
+pub(crate) struct UserSetDetails {
     pub(crate) username: Username,
     pub(crate) details: Rc<UserDetails>,
 }
 
-impl PendingStep for UserDetailsFinalize {
-    fn build(&self, map: &dyn DependencyMap) -> PendingStepResult {
-        let current_email = map.get(Dependency::UserEmail(self.username.clone()))?;
-        if *current_email != self.details.email {
-            let step = UserDetailsFinalizeStep {
-                user_url: map.get(Dependency::UserUrl(self.username.clone()))?,
-                auth_token: map.get(Dependency::AuthToken(self.username.clone()))?,
-                username: self.username.clone(),
-                password: self.details.password.clone(),
-                email: self.details.email.clone(),
-            };
-            ok_step(step)
-        } else {
-            Ok(None)
+impl Step for UserSetDetails {
+    fn request(&self, map: &dyn DependencyMap) -> Result<Option<reqwest::Request>, Dependency> {
+        let user_url = map.get(Dependency::UserUrl(self.username.clone()))?;
+        let auth_token = map.get(Dependency::AuthToken(self.username.clone()))?;
+        let prev_email = map.get(Dependency::UserEmail(self.username.clone()))?;
+        if prev_email.as_str() == &self.details.email {
+            return Ok(None);
         }
+        let url = Url::parse(user_url.as_str()).unwrap();
+        let body = models::UserRequest {
+            username: None,
+            email: self.details.email.to_string(),
+            password: self.details.password.to_string(),
+            is_staff: None, // very bad bad bad bad bad
+        };
+        let req = Request::new(Method::PUT, url)
+            .auth_token(auth_token.as_str())
+            .json(&body)
+            .unwrap()
+            .accept_json();
+        Ok(Some(req))
+    }
+
+    fn affects(&self) -> Resource {
+        Resource::User(self.username.clone())
+    }
+
+    fn effect(&self) -> StepEffect {
+        StepEffect::Modified
+    }
+
+    fn deserialize(&self, body: bytes::Bytes) -> serde_json::Result<Entries> {
+        deserialize_user_response(body)
+    }
+
+    fn provides(&self) -> Vec<Dependency> {
+        vec![
+            (Dependency::UserUrl(self.username.clone())),
+            (Dependency::UserEmail(self.username.clone())),
+            (Dependency::UserGroupsUrl(self.username.clone())),
+        ]
     }
 }
 
@@ -334,45 +302,4 @@ fn deserialize_auth_token(
     let value = format!("Token {}", body.token);
     let outputs = vec![(Dependency::AuthToken(username.clone()), value)];
     Ok(outputs)
-}
-
-/// A [Step] to sync the user's details on the backend with what is specified.
-///
-/// Really, this is a step to set only the user's email, because it is the only
-/// mutable field that is possible to set (username is immutable, password cannot
-/// be changed without knowing its previous value).
-pub(crate) struct UserDetailsFinalizeStep {
-    user_url: Rc<String>,
-    auth_token: Rc<String>,
-    username: Username,
-    password: String,
-    email: String,
-}
-
-impl Step for UserDetailsFinalizeStep {
-    fn request(&self) -> reqwest::Request {
-        let url = Url::parse(&self.user_url).unwrap();
-        let body = models::UserRequest {
-            username: None,
-            email: self.email.to_string(),
-            password: self.password.to_string(),
-            is_staff: None, // very bad bad bad bad bad
-        };
-        Request::new(Method::PUT, url)
-            .auth_token(self.auth_token.as_str())
-            .json(&body)
-            .unwrap()
-            .accept_json()
-    }
-
-    fn deserialize(&self, body: bytes::Bytes) -> serde_json::Result<EffectKind> {
-        deserialize_user_response(&self.username, body).map(EffectKind::Modified)
-    }
-
-    fn provides(&self) -> NonEmpty<Dependency> {
-        nonempty![
-            Dependency::User(self.username.clone()),
-            Dependency::UserEmail(self.username.clone())
-        ]
-    }
 }

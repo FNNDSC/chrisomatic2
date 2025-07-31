@@ -38,6 +38,12 @@ impl From<&'static str> for Username {
     }
 }
 
+impl From<String> for Username {
+    fn from(value: String) -> Self {
+        Username::new(CompactString::from_string_buffer(value))
+    }
+}
+
 /// ChRIS group name.
 #[nutype(derive(
     Display,
